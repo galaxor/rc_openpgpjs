@@ -1,11 +1,3 @@
-THIS PROJECT IS DEAD.
-================
-This project is killed due to lost interest, motivation and resources. Its
-future development and survival relies entirely on the FOSS community. Please
-turn to maintained forks instead.
-
-Feel free to contact me if you have any questions.
-
 rc_openpgpjs
 ================
 rc_openpgpjs is an open source (GPLv2) extension adding OpenPGPs functionality
