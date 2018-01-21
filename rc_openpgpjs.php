@@ -47,8 +47,8 @@ class rc_openpgpjs extends rcube_plugin {
 
       // load js
       $this->include_script('js/public/bundle.js');
-      $this->include_script('js/rc_openpgpjs.crypto.js');
-      $this->include_script('js/rc_openpgpjs.js');
+      // $this->include_script('js/rc_openpgpjs.crypto.js');
+      // $this->include_script('js/rc_openpgpjs.js');
 
       if(isset($_SESSION["rc_openpgpjs_outdated"])) {
         $this->include_script('js/outdated.js');

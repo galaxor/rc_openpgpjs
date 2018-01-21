@@ -2,9 +2,7 @@ const path = require('path');
 
 module.exports = {
   entry: [
-    "openpgp",
-    "whatwg-fetch",
-    "promise-polyfill",
+    path.resolve(__dirname, 'rc_openpgpjs.js'),
   ],
 
   output: {
