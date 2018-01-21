@@ -24,7 +24,8 @@ console.log("This is getting run");
 
 var VERSTR = "20131021";
 
-window.rc_openpgpjs_crypto = require('./rc_openpgpjs.crypto.js');
+var rc_openpgpjs_crypto = new (require('./rc_openpgpjs.crypto.js'))();
+window.openpgp = require('openpgp');
 
 if(window.rcmail) {
   rcmail.addEventListener("init", function() {
@@ -222,14 +223,23 @@ if(window.rcmail) {
     }
 
     // TODO Currently only RSA is supported, fix this when OpenPGP.js implements ElGamal & DSA
-    var ident = $("#gen_ident option:selected").text();
-    var keys = rc_openpgpjs_crypto.generateKeys(bits, 1, ident, $("#gen_passphrase").val());
-    $("#generated_keys").html("<pre id=\"generated_private\">" + keys["private"] + "</pre><pre id=\"generated_public\">" + keys["public"]  +  "</pre>");
-    $("#generate_key_error").addClass("hidden");
-    $("#import_button").removeClass("hidden");
+    var identities = JSON.parse($("#openpgpjs_identities").html());
+    var selectedIdent = $("#gen_ident option:selected").val();
+    var keys = rc_openpgpjs_crypto.generateKeys(bits, identities[selectedIdent], $("#gen_passphrase").val()).then(
+    function (result) {
+      $("#generated_keys").html("<pre id=\"generated_private\">" + result.privateKeyArmored + "</pre><pre id=\"generated_public\">" + result.publicKeyArmored  +  "</pre>");
+      $("#generate_key_error").addClass("hidden");
+      $("#import_button").removeClass("hidden");
+    },
+    function (err) {
+      $("#generate_key_error").html(err);
+      $("#generate_key_error").removeClass("hidden");
+    });
 
     return true;
   }
+  window.generate_keypair = generate_keypair;
+  
 
   /**
    * Import generated key pair.
@@ -616,34 +626,24 @@ if(window.rcmail) {
     }
 
     try {
-console.log("One zero");
       privkey_obj = rc_openpgpjs_crypto.parsePrivkey(key);
-console.log("One zero one");
     } catch(e) {
       $("#import_priv_error").removeClass("hidden");
-console.log("I thought hee err was eated");
       $("#import_priv_error p").html(rcmail.gettext("import_failed", "rc_openpgpjs"));
       return false;
     }
 
-console.log("One two too");
     if(!privkey_obj.decryptSecretMPIs(passphrase)) {
-console.log("One three two ");
       $("#import_priv_error").removeClass("hidden");
       $("#import_priv_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
       return false;
     }
 
     // Extract pubkey from privkey and import
-console.log("Zero");
 	pubkey = privkey_obj.extractPublicKey();
-console.log("One");
 	rc_openpgpjs_crypto.importPubkey(pubkey);
-console.log("One 2");
 	rc_openpgpjs_crypto.importPrivkey(key, passphrase);
-console.log("One 3");
     updateKeyManager();
-console.log("One 4");
     $("#importPrivkeyField").val("");
     $("#passphrase").val("");
     $("#import_priv_error").addClass("hidden");

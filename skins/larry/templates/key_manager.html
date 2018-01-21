@@ -66,19 +66,19 @@
           <span class="ui-icon ui-icon-alert"></span>
           <p></p>
         </div>
-        <label for="gen_ident"><roundcube:label name="rc_openpgpjs.ident" />:</label> <select id='gen_ident' /></select>
-        <label for="gen_passphrase"><roundcube:label name="rc_openpgpjs.passphrase" />:</label> <input type='password' id='gen_passphrase' /> 
-        <label for="gen_passphrase_verify"><roundcube:label name="rc_openpgpjs.verify" />:</label> <input type='password' id='gen_passphrase_verify' /> 
+        <label for="gen_ident"><roundcube:label name="rc_openpgpjs.ident" />:</label> <select id="gen_ident" /></select>
+        <label for="gen_passphrase"><roundcube:label name="rc_openpgpjs.passphrase" />:</label> <input type="password" id="gen_passphrase" /> 
+        <label for="gen_passphrase_verify"><roundcube:label name="rc_openpgpjs.verify" />:</label> <input type="password" id="gen_passphrase_verify" /> 
         <label for="gen_bits"><roundcube:label name="rc_openpgpjs.bits" />:</label> 
-        <select id='gen_bits'>
-          <option value='2048'>2048</option>
-          <option value='4096'>4096</option>
+        <select id="gen_bits">
+          <option value="2048">2048</option>
+          <option value="4096">4096</option>
         </select> 
         <div class="formbuttons">
-          <input type='button' class='button mainaction' value='<roundcube:label name="rc_openpgpjs.generate" />' onclick='generate_keypair($("#gen_bits").val(), $("#gen_algo").val());' />
-          <input type='button' class='button mainaction hidden' id='import_button' value='<roundcube:label name="rc_openpgpjs.import" />' onclick='importGenerated();' />
+          <input type="button" class="button mainaction" value='<roundcube:label name="rc_openpgpjs.generate" />' onclick='generate_keypair($("#gen_bits").val(), $("#gen_algo").val());' />
+          <input type="button" class="button mainaction hidden" id="import_button" value="<roundcube:label name="rc_openpgpjs.import" />" onclick="importGenerated();" />
         </div>
-        <div id='generated_keys'></div>
+        <div id="generated_keys"></div>
     </div>
   </div>
 </div>
