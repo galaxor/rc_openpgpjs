@@ -329,7 +329,7 @@ class rc_openpgpjs extends rcube_plugin {
       $this->add_texts('locallization/', false);
       $p['list']['openpgp_prefs'] = array(
           'id'      => 'openpgp_prefs',
-          'section' => Q($this->gettext('openpgp_title'))
+          'section' => rcube::Q($this->gettext('openpgp_title'))
       );
       return ($p);
   }
@@ -343,7 +343,7 @@ class rc_openpgpjs extends rcube_plugin {
    * @return array Modified parameters
    */
   function preferences_list($p) {
-    if (!get_input_value('_framed', RCUBE_INPUT_GPC) && $args['section'] == 'openpgp_prefs') {
+    if (!rcube_utils::get_input_value('_framed', rcube_utils::INPUT_GPC) && $args['section'] == 'openpgp_prefs') {
         $p['blocks'][$args['section']]['options'] = array (
             'title'     => '',
             'content'   => html::tag('div', array('id' => 'pm_dummy'), '')
@@ -367,7 +367,7 @@ class rc_openpgpjs extends rcube_plugin {
                                   "$('#rcmfd_sign').prop('disabled', !(this.checked))"
          ));
          $p['blocks']['openpgp']['options']['enabled'] = array(
-            'title' => html::label($field_id, Q($this->gettext('openpgp_enabled'))),
+            'title' => html::label($field_id, rcube::Q($this->gettext('openpgp_enabled'))),
             'content' => $enabled->show($this->is_enabled())
          );
       } 
@@ -383,7 +383,7 @@ class rc_openpgpjs extends rcube_plugin {
          );
 
       $p['blocks']['openpgp']['options']['warn'] = array(
-        'title' => html::label($field_id, Q($this->gettext('warn_on_unencrypted'))),
+        'title' => html::label($field_id, rcube::Q($this->gettext('warn_on_unencrypted'))),
         'content' => $warn->show($this->rc->config->get('warn_on_unencrypted', false)?1:0),
     );
 
@@ -398,7 +398,7 @@ class rc_openpgpjs extends rcube_plugin {
          );
 
       $p['blocks']['openpgp']['options']['attachKey'] = array(
-        'title' => html::label($field_id, Q($this->gettext('always_attachKey'))),
+        'title' => html::label($field_id, rcube::Q($this->gettext('always_attachKey'))),
         'content' => $attach->show($this->rc->config->get('attachKey', false)?1:0),
       );
 
@@ -412,7 +412,7 @@ class rc_openpgpjs extends rcube_plugin {
             )
       );      
       $p['blocks']['openpgp']['options']['encrypt'] = array(
-        'title' => html::label($field_id, Q($this->gettext('always_encrypt'))),
+        'title' => html::label($field_id, rcube::Q($this->gettext('always_encrypt'))),
         'content' => $encrypt->show($this->rc->config->get('encrypt', false)?1:0),
       );
 
@@ -426,7 +426,7 @@ class rc_openpgpjs extends rcube_plugin {
             )
          );      
       $p['blocks']['openpgp']['options']['sign'] = array(
-        'title' => html::label($field_id, Q($this->gettext('always_sign'))),
+        'title' => html::label($field_id, rcube::Q($this->gettext('always_sign'))),
         'content' => $sign->show($this->rc->config->get('sign', false)?1:0),
       );
 
