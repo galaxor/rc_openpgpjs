@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "openpgp": "^2.6.1",
+    "promise-polyfill": "^7.0.0",
+    "whatwg-fetch": "^2.0.3"
+  },
+  "devDependencies": {
+    "webpack": "^3.10.0"
+  }
+}

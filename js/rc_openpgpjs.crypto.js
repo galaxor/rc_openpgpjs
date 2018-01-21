@@ -21,8 +21,11 @@
  * +-------------------------------------------------------------------------+
  * */
 
+const openpgp = require('openpgp');
 openpgp.init();
 // openpgp.config.debug = true
+
+rc_openpgpjs = {};
 
 /**
  * Encrypt (and sign) a message
@@ -34,7 +37,7 @@ openpgp.init();
  * @return {String} Encrypted message
  */
 // TODO: Feed key armored and do openpgp.read_* here
-function encrypt(pubkeys, text, sign, privkey, passphrase) {
+function rc_openpgpjs.encrypt(pubkeys, text, sign, privkey, passphrase) {
   sign = (typeof sign === "undefined") ? 0 : 1;
   if(sign) {
     privkey = (typeof privkey === "undefined") ? 0 : privkey;
@@ -80,7 +83,7 @@ function encrypt(pubkeys, text, sign, privkey, passphrase) {
  * @param passphrase {String} Passphrase of private key
  * @return {Array} Armored key pair
  */
-function generateKeys(bits, algo, ident, passphrase) {
+function rc_openpgpjs.generateKeys(bits, algo, ident, passphrase) {
   try {
     keys = openpgp.generate_key_pair(1, bits, ident, passphrase);
     arr = new Array();
@@ -100,7 +103,7 @@ function generateKeys(bits, algo, ident, passphrase) {
  * @param passphrase      {String} Passphrase of private key
  * @return {String} Signed message
  */
-function sign(msg, privkey_armored, passphrase) {
+function rc_openpgpjs.sign(msg, privkey_armored, passphrase) {
   var priv_key = openpgp.read_privateKey(privkey_armored);
 
   if(!priv_key[0].decryptSecretMPIs(passphrase)) {
@@ -123,7 +126,7 @@ function sign(msg, privkey_armored, passphrase) {
  * @param passphrase      {String} Passphrase of private key
  * @return {String} Decrypted message
  */
-function decrypt(msg, privkey_armored, passphrase) {
+function rc_openpgpjs.decrypt(msg, privkey_armored, passphrase) {
   if(!("decrypt" in msg[0])) {
     return false;
   }
@@ -172,28 +175,28 @@ function decrypt(msg, privkey_armored, passphrase) {
  * @param msg     {array}  Message to verify
  * @param pubkeys {array}  Public key(s) to verify against
  */
-function verify(msg, pubkeys) {
+function rc_openpgpjs.verify(msg, pubkeys) {
   return msg[0].verifySignature(pubkeys);
 }
 
 
-function parseMsg(msg) {
+function rc_openpgpjs.parseMsg(msg) {
 	return openpgp.read_message(msg);
 }
 
-function hasPrivateKey() {
+function rc_openpgpjs.hasPrivateKey() {
 	return openpgp.keyring.hasPrivateKey();
 }
 
-function getPrivkeyCount() {
+function rc_openpgpjs.getPrivkeyCount() {
 	return openpgp.keyring.privateKeys.length;
 }
 
-function getPubkeyCount() {
+function rc_openpgpjs.getPubkeyCount() {
 	return openpgp.keyring.publicKeys.length;
 }
 
-function getFingerprint(i, private, niceformat) {
+function rc_openpgpjs.getFingerprint(i, private, niceformat) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -217,7 +220,7 @@ function getFingerprint(i, private, niceformat) {
 	return fingerprint;
 }
 
-function getKeyID(i, private) {
+function rc_openpgpjs.getKeyID(i, private) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -231,7 +234,7 @@ function getKeyID(i, private) {
 	return key_id;
 }
 
-function getPerson(i, j, private) {
+function rc_openpgpjs.getPerson(i, j, private) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -245,46 +248,46 @@ function getPerson(i, j, private) {
 	return person;
 }
 
-function getPubkeyForAddress(address) {
+function rc_openpgpjs.getPubkeyForAddress(address) {
 	var pubkey = openpgp.keyring.getPublicKeyForAddress(address);
 	return pubkey;
 }
 
-function getFingerprintForSender(sender) {
+function rc_openpgpjs.getFingerprintForSender(sender) {
 	var pubkey = getPubkeyForAddress(sender);
 	var fingerprint = util.hexstrdump(pubkey[0].obj.getFingerprint()).toUpperCase().substring(8).replace(/(.{2})/g,"$1 ");
 	return fingerprint;
 }
 
-function getPrivkeyArmored(id) {
+function rc_openpgpjs.getPrivkeyArmored(id) {
 	var keyid = openpgp.keyring.privateKeys[id].obj.getKeyId();
 	var privkey_armored = openpgp.keyring.getPrivateKeyForKeyId(keyid)[0].key.armored;
 	return privkey_armored;
 }
 
-function getPrivkeyObj(id) {
+function rc_openpgpjs.getPrivkeyObj(id) {
 	var privkey_armored = getPrivkeyArmored(id);
     return privkey = openpgp.read_privateKey(privkey_armored);
 }
 
 // Gets privkey obj from armored
-function getPrivkey(armored) {
+function rc_openpgpjs.getPrivkey(armored) {
 	var privkey = openpgp.read_privateKey(armored);
 	return privkey;
 }
 
-function decryptSecretMPIs(i, p) {
+function rc_openpgpjs.decryptSecretMPIs(i, p) {
 	return openpgp.keyring.privateKeys[i].obj.decryptSecretMPIs(p);
 }
 
-function decryptSecretMPIsForId(id, passphrase) {
+function rc_openpgpjs.decryptSecretMPIsForId(id, passphrase) {
 	var keyid = openpgp.keyring.privateKeys[id].obj.getKeyId();
 	var privkey_armored = openpgp.keyring.getPrivateKeyForKeyId(keyid)[0].key.armored;
 	var privkey = getPrivkey(privkey_armored);
 	return privkey[0].decryptSecretMPIs(passphrase);
 }
 
-function importPubkey(key) {
+function rc_openpgpjs.importPubkey(key) {
 	try {
 		openpgp.keyring.importPublicKey(key);
 		openpgp.keyring.store();
@@ -295,7 +298,7 @@ function importPubkey(key) {
 	return true;
 }
 
-function importPrivkey(key, passphrase) {
+function rc_openpgpjs.importPrivkey(key, passphrase) {
 	try {
 		openpgp.keyring.importPrivateKey(key, passphrase);
 		openpgp.keyring.store();
@@ -306,7 +309,7 @@ function importPrivkey(key, passphrase) {
 	return true;
 }
 
-function parsePrivkey(key) {
+function rc_openpgpjs.parsePrivkey(key) {
 	try {
 		return openpgp.read_privateKey(key)[0];
 	} catch(e) {
@@ -314,7 +317,7 @@ function parsePrivkey(key) {
 	}
 }
 
-function removeKey(i, private) {
+function rc_openpgpjs.removeKey(i, private) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -326,7 +329,7 @@ function removeKey(i, private) {
 	return openpgp.keyring.removePublicKey(i);
 }
 
-function verifyBasicSignatures(i) {
+function rc_openpgpjs.verifyBasicSignatures(i) {
 	return (openpgp.keyring.publicKeys[i].obj.verifyBasicSignatures() ? true : false);
 }
 
@@ -337,7 +340,7 @@ function verifyBasicSignatures(i) {
  * @return {String} Algorithm type
  */
 
-function getAlgorithmString(i, private) {
+function rc_openpgpjs.getAlgorithmString(i, private) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -361,7 +364,7 @@ function getAlgorithmString(i, private) {
 	return result;
 }
 
-function exportArmored(i, private) {
+function rc_openpgpjs.exportArmored(i, private) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -373,7 +376,7 @@ function exportArmored(i, private) {
 	}
 }
 
-function getKeyUserids(i, private) {
+function rc_openpgpjs.getKeyUserids(i, private) {
 	if(typeof(private) == "undefined") {
 		private = false;
 	}
@@ -384,3 +387,5 @@ function getKeyUserids(i, private) {
 		return openpgp.keyring.publicKeys[i].obj.userIds;
 	}
 }
+
+module.exports = rc_openpgpjs;

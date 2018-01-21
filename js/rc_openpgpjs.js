@@ -22,6 +22,8 @@
 
 var VERSTR = "20131021";
 
+const rc_openpgpjs = require('./rc_openpgpjs.crypto.js');
+
 if(window.rcmail) {
   rcmail.addEventListener("init", function() {
     if(!window.crypto || !window.crypto.getRandomValues) { // OpenPGP.js specific
@@ -161,7 +163,7 @@ if(window.rcmail) {
     var passobj = JSON.parse(this.passphrase);
     var privkey_armored = getPrivkeyArmored(passobj.id);
 
-    decrypted = decrypt(msg, privkey_armored, passobj.passphrase);
+    decrypted = rc_openpgpjs.decrypt(msg, privkey_armored, passobj.passphrase);
     if(decrypted) {
       $("#messagebody div.message-part pre").html("<strong>********* *BEGIN ENCRYPTED or SIGNED PART* *********</strong>\n" + escapeHtml(decrypted) + "\n<strong>********** *END ENCRYPTED or SIGNED PART* **********</strong>");
     } else {
@@ -219,7 +221,7 @@ if(window.rcmail) {
 
     // TODO Currently only RSA is supported, fix this when OpenPGP.js implements ElGamal & DSA
     var ident = $("#gen_ident option:selected").text();
-    var keys = generateKeys(bits, 1, ident, $("#gen_passphrase").val());
+    var keys = rc_openpgpjs.generateKeys(bits, 1, ident, $("#gen_passphrase").val());
     $("#generated_keys").html("<pre id=\"generated_private\">" + keys["private"] + "</pre><pre id=\"generated_public\">" + keys["public"]  +  "</pre>");
     $("#generate_key_error").addClass("hidden");
     $("#import_button").removeClass("hidden");
@@ -418,7 +420,7 @@ if(window.rcmail) {
       // end add user's public key
 
       var text = $("textarea#composebody").val();
-      var encrypted = encrypt(pubkeys, text, 1, privkey, passobj.passphrase);
+      var encrypted = rc_openpgpjs.encrypt(pubkeys, text, 1, privkey, passobj.passphrase);
 		
       if(encrypted) {
         $("textarea#composebody").val(encrypted);
@@ -448,7 +450,7 @@ if(window.rcmail) {
       // end add user's public key
 
       var text = $("textarea#composebody").val();
-      var encrypted = encrypt(pubkeys, text);
+      var encrypted = rc_openpgpjs.encrypt(pubkeys, text);
       if(encrypted) {
         $("textarea#composebody").val(encrypted);
         this.finished_treating = 1;
@@ -479,7 +481,7 @@ if(window.rcmail) {
       }
 
       var privkey_armored = getPrivkeyArmored(passobj.id);
-      signed = sign($("textarea#composebody").val(), privkey_armored, passobj.passphrase);
+      signed = rc_openpgpjs.sign($("textarea#composebody").val(), privkey_armored, passobj.passphrase);
 
       if(signed) {
         $("textarea#composebody").val(signed);
@@ -612,24 +614,34 @@ if(window.rcmail) {
     }
 
     try {
+console.log("One zero");
       privkey_obj = parsePrivkey(key);
+console.log("One zero one");
     } catch(e) {
       $("#import_priv_error").removeClass("hidden");
+console.log("I thought hee err was eated");
       $("#import_priv_error p").html(rcmail.gettext("import_failed", "rc_openpgpjs"));
       return false;
     }
 
+console.log("One two too");
     if(!privkey_obj.decryptSecretMPIs(passphrase)) {
+console.log("One three two ");
       $("#import_priv_error").removeClass("hidden");
       $("#import_priv_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
       return false;
     }
 
     // Extract pubkey from privkey and import
+console.log("Zero");
 	pubkey = privkey_obj.extractPublicKey();
+console.log("One");
 	importPubkey(pubkey);
+console.log("One 2");
 	importPrivkey(key, passphrase);
+console.log("One 3");
     updateKeyManager();
+console.log("One 4");
     $("#importPrivkeyField").val("");
     $("#passphrase").val("");
     $("#import_priv_error").addClass("hidden");
