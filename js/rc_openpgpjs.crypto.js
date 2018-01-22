@@ -179,15 +179,15 @@ rc_openpgpjs_crypto.prototype.parseMsg = function (msg) {
 }
 
 rc_openpgpjs_crypto.prototype.hasPrivateKey = function () {
-	return this.keyring.privateKeys.length > 0;
+	return this.keyring.privateKeys.keys.length > 0;
 }
 
 rc_openpgpjs_crypto.prototype.getPrivkeyCount = function () {
-	return this.keyring.privateKeys.length;
+	return this.keyring.privateKeys.keys.length;
 }
 
 rc_openpgpjs_crypto.prototype.getPubkeyCount = function () {
-	return this.keyring.publicKeys.length;
+	return this.keyring.publicKeys.keys.length;
 }
 
 rc_openpgpjs_crypto.prototype.getFingerprint = function (i, private, niceformat) {
@@ -200,9 +200,9 @@ rc_openpgpjs_crypto.prototype.getFingerprint = function (i, private, niceformat)
 	}
 
 	if(private == false) {
-		fingerprint = util.hexstrdump(this.keyring.publicKeys[i].getFingerprint()).toUpperCase();
+		fingerprint = openpgp.util.hexstrdump(this.keyring.publicKeys.keys[i].primaryKey.getFingerprint()).toUpperCase();
 	} else {
-		fingerprint = util.hexstrdump(this.keyring.privateKeys[i].getFingerprint()).toUpperCase();
+		fingerprint = openpgp.util.hexstrdump(this.keyring.privateKeys.keys[i].primaryKey.getFingerprint()).toUpperCase();
 	}
 
 	if(niceformat) {
@@ -219,13 +219,17 @@ rc_openpgpjs_crypto.prototype.getKeyID = function (i, private) {
 		private = false;
 	}
 
-	if(private == false) {
-		key_id = "0x" + util.hexstrdump(this.keyring.publicKeys[i].getKeyId()).toUpperCase().substring(8);
-	} else {
-		key_id = "0x" + util.hexstrdump(this.keyring.privateKeys[i].getKeyId()).toUpperCase().substring(8);
-	}
+        var key_id;
 
-	return key_id;
+	if(private == false) {
+		key_id = this.keyring.publicKeys.keys[i].primaryKey.getKeyId();
+	} else {
+	        key_id = this.keyring.privateKeys.keys[i].primaryKey.getKeyId();
+	}
+        
+        key_id_str = "0x" + openpgp.util.hexstrdump(key_id.bytes).toUpperCase().substring(8);
+
+	return key_id_str;
 }
 
 rc_openpgpjs_crypto.prototype.getPerson = function (i, j, private) {
@@ -234,9 +238,9 @@ rc_openpgpjs_crypto.prototype.getPerson = function (i, j, private) {
 	}
 
 	if(private == false) {
-		person = this.keyring.publicKeys[i].userIds[j].text;
+		person = (this.keyring.publicKeys.keys[i].getUserIds())[j];
 	} else {
-		person = this.keyring.privateKeys[i].userIds[j].text;
+		person = (this.keyring.privateKeys.keys[i].getUserIds())[j];
 	}
 
 	return person;
@@ -345,23 +349,17 @@ rc_openpgpjs_crypto.prototype.getAlgorithmString = function (i, private) {
 		private = false;
 	}
 
+        var key;
 	if(private) {
-		key = this.keyring.privateKeys[i].obj;
+		key = this.keyring.privateKeys.keys[i];
 	} else {
-		key = this.keyring.publicKeys[i].obj;
+		key = this.keyring.publicKeys.keys[i];
 	}
 
-	if(typeof(key.publicKeyPacket) !== "undefined") {
-		var result = key.publicKeyPacket.MPIs[0].mpiByteLength * 8 + "/";
-		var sw = key.publicKeyPacket.publicKeyAlgorithm;
-	} else {
-		// For some reason publicKeyAlgorithm doesn't work directly on the privatekeyPacket, heh
-		var result = (key.privateKeyPacket.publicKey.MPIs[0].mpiByteLength * 8 + "/");
-		var sw = key.privateKeyPacket.publicKey.publicKeyAlgorithm;
-	}
+        var algo = key.primaryKey.algorithm;
+        var size = key.toPublic().subKeys[0].subKey.getBitSize();
 
-	result += typeToStr(sw);
-	return result;
+	return size+"/"+algo;
 }
 
 rc_openpgpjs_crypto.prototype.exportArmored = function (i, private) {
@@ -382,9 +380,9 @@ rc_openpgpjs_crypto.prototype.getKeyUserids = function (i, private) {
 	}
 
 	if(private) {
-		return this.keyring.privateKeys[i].userIds;
+		return this.keyring.privateKeys.keys[i].userIds;
 	} else {
-		return this.keyring.publicKeys[i].userIds;
+		return this.keyring.publicKeys.keys[i].userIds;
 	}
 }
 

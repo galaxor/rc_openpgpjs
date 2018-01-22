@@ -20,8 +20,6 @@
 +-------------------------------------------------------------------------+
 */
 
-console.log("This is getting run");
-
 var VERSTR = "20131021";
 
 var rc_openpgpjs_crypto = new (require('./rc_openpgpjs.crypto.js'))();
@@ -697,23 +695,25 @@ if(window.rcmail) {
     // fill key manager public key table
     $("#openpgpjs_pubkeys tbody").empty();
     for (var i = 0; i < rc_openpgpjs_crypto.getPubkeyCount(); i++) {
-      var key_id = rc_openpgpjs_crypto.getKeyID(i);
+      var key_ids = rc_openpgpjs_crypto.getKeyID(i);
       var fingerprint = rc_openpgpjs_crypto.getFingerprint(i);
-      var person = escapeHtml(rc_openpgpjs_crypto.getPerson(i, 0));
+      var person = rc_openpgpjs_crypto.getPerson(i, 0);
       var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i);
-      var status = (rc_openpgpjs_crypto.verifyBasicSignatures(i) ? rcmail.gettext("valid", "rc_openpgpjs") : rcmail.gettext("invalid", "rc_openpgpjs"));
-      var del = "<a href='#' onclick='if(confirm(\"" + rcmail.gettext('delete_pub', 'rc_openpgpjs') + "\")) { rc_openpgpjs_crypto.removeKey(" + i + "); updateKeyManager(); }'>" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
-      var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i)) + "\" download=\"pubkey_" + rc_openpgpjs_crypto.getKeyID(i) + ".asc\">Export</a> ";
+//       var status = (rc_openpgpjs_crypto.verifyBasicSignatures(i) ? rcmail.gettext("valid", "rc_openpgpjs") : rcmail.gettext("invalid", "rc_openpgpjs"));
+//       var del = "<a href='#' onclick='if(confirm(\"" + rcmail.gettext('delete_pub', 'rc_openpgpjs') + "\")) { rc_openpgpjs_crypto.removeKey(" + i + "); updateKeyManager(); }'>" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
+//       var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i)) + "\" download=\"pubkey_" + rc_openpgpjs_crypto.getKeyID(i) + ".asc\">Export</a> ";
 
       var result = "<tr>" +
-        "<td>" + key_id      + "</td>" +
+        "<td>" + key_ids      + "</td>" +
         "<td>" + fingerprint + "</td>" +
-        "<td>" + person      + "</td>" +
+        "<td class=\"person\"></td>" +
         "<td>" + length_alg  + "</td>" +
         "<td>" + status      + "</td>" +
         "<td>" + exp + del   + "</td>" +
         "</tr>";
       $("#openpgpjs_pubkeys tbody").append(result);
+      // Set "person" using the text property to get html escaped.
+      $("#openpgpjs_pubkeys tbody tr:last td.person").text(person);
     }
 
     // fill key manager private key table
@@ -722,7 +722,7 @@ if(window.rcmail) {
       for (var j = 0; j < rc_openpgpjs_crypto.getKeyUserids(i, true).length; j++) {
         var key_id = rc_openpgpjs_crypto.getKeyID(i, true);
         var fingerprint = rc_openpgpjs_crypto.getFingerprint(i, true);
-        var person = escapeHtml(rc_openpgpjs_crypto.getPerson(i, j, true));
+        var person = rc_openpgpjs_crypto.getPerson(i, j, true);
         var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i, true);
         var del = "<a href='#' onclick='if(confirm(\"" + rcmail.gettext('delete_priv', 'rc_openpgpjs') + "\")) { rc_openpgpjs_crypto.removeKey(" + i + ", true); updateKeyManager(); }'>" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
         var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i, true)) + "\" download=\"privkey_" + rc_openpgpjs_crypto.getKeyID(i, true) + ".asc\">Export</a> ";
@@ -730,12 +730,14 @@ if(window.rcmail) {
         var result = "<tr>" +
           "<td>" + key_id      + "</td>" +
           "<td>" + fingerprint + "</td>" +
-          "<td>" + person      + "</td>" +
+          "<td class=\"person\"></td>" +
           "<td>" + length_alg  + "</td>" +
           "<td>" + exp + del   + "</td>" +
           "</tr>";
 
         $("#openpgpjs_privkeys tbody").append(result);
+        // We add the "person" thing using the text property so that any unsafe html gets escaped.
+        $("#openpgpjs_privkeys tbody tr:last td.person").text(person);
       }
     }
 
@@ -743,7 +745,10 @@ if(window.rcmail) {
     $("#gen_ident").html("");
     identities = JSON.parse($("#openpgpjs_identities").html());
     for (var i = 0; i < identities.length; i++) {
-      $("#gen_ident").append("<option value='" + i + "'>" + escapeHtml(identities[i].name + " <" + identities[i].email + ">") + "</option>");
+      var identStr = identities[i].name + " <" + identities[i].email + ">";
+      $("#gen_ident").append("<option value='" + i + "'></option>");
+      // we use the text property so that html gets escaped.
+      $("#gen_ident option:last").text(identStr);
     }
   }
 
@@ -779,19 +784,6 @@ if(window.rcmail) {
     }
 
     return(r);
-  }
-
-  /**
-   * Escape some unsafe characters into their html entities.
-   *
-   * @param unsafe {String} Unsafe string to escape
-   */
-  function escapeHtml(unsafe) {
-        return unsafe.replace(/&/g, "&amp;")
-                     .replace(/</g, "&lt;")
-                     .replace(/>/g, "&gt;")
-                     .replace(/"/g, "&quot;")
-                     .replace(/'/g, "&#039;");
   }
 
   function showMessages(msg) { console.log(msg); }
