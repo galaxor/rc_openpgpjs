@@ -247,6 +247,8 @@ class rc_openpgpjs extends rcube_plugin {
     $results = array();
     $title = $DOM->getElementsByTagName("title")->item(0);
     $body = $DOM->getElementsByTagName("body")->item(0);
+    // Remove the h1 title, because it's the same as the page title, which we are already printing.
+    $body->removeChild($body->getElementsByTagName("h1")->item(0));
 
     // The client will be displaying this text.
     // Let's make sure it's not html.

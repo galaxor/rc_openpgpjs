@@ -605,6 +605,7 @@ if(window.rcmail) {
       const full_errmsg = errmsg+"\n"
                           + rcmail.gettext("server_said", "rc_openpgpjs")+"\n"
                           + response.status+"\n"
+                          + result.title+"\n"
                           + result.body;
 
       alert(full_errmsg);
