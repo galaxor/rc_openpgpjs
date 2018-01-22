@@ -695,7 +695,7 @@ if(window.rcmail) {
     // fill key manager public key table
     $("#openpgpjs_pubkeys tbody").empty();
     for (var i = 0; i < rc_openpgpjs_crypto.getPubkeyCount(); i++) {
-      var key_ids = rc_openpgpjs_crypto.getKeyID(i);
+      var key_id = rc_openpgpjs_crypto.getKeyID(i);
       var fingerprint = rc_openpgpjs_crypto.getFingerprint(i);
       var person = rc_openpgpjs_crypto.getPerson(i, 0);
       var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i);
@@ -718,22 +718,35 @@ if(window.rcmail) {
       case 'invalid':
       default: status = rcmail.gettext("invalid", "rc_openpgpjs"); break;
       }
-//       var del = "<a href='#' onclick='if(confirm(\"" + rcmail.gettext('delete_pub', 'rc_openpgpjs') + "\")) { rc_openpgpjs_crypto.removeKey(" + i + "); updateKeyManager(); }'>" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
-//       var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i)) + "\" download=\"pubkey_" + rc_openpgpjs_crypto.getKeyID(i) + ".asc\">Export</a> ";
+      const keyRemoveConfirmer = function (i) {
+        return function () {
+          if (confirm(rcmail.gettext('delete_pub', 'rc_openpgpjs'))) {
+            if (rc_openpgpjs_crypto.removeKey(i) === null) {
+              throw("Failed to delete the key "+key_id);
+            } else {
+              updateKeyManager();
+            }
+          }
+        };
+      };
+      var del = "<a href=\"#\" class=\"del_key\">" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
+      var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i)) + "\" download=\"pubkey_" + key_id + ".asc\">Export</a> ";
 
       var result = "<tr>" +
-        "<td>" + key_ids      + "</td>" +
+        "<td>" + key_id      + "</td>" +
         "<td>" + fingerprint + "</td>" +
         "<td class=\"person\"></td>" +
         "<td>" + length_alg  + "</td>" +
         "<td>" + status      + "</td>" +
-        "<td>" + exp + del   + "</td>" +
+        "<td class=\"actions\">" + exp + del   + "</td>" +
         "</tr>";
       $("#openpgpjs_pubkeys tbody").append(result);
       // Set "person" using the text property to get html escaped.
       $("#openpgpjs_pubkeys tbody tr:last td.person").text(person);
+      $("#openpgpjs_pubkeys tbody tr:last td.actions a.del_key").click(keyRemoveConfirmer(i));
     }
 
+/*
     // fill key manager private key table
     $("#openpgpjs_privkeys tbody").empty();
     for (var i = 0; i < rc_openpgpjs_crypto.getPrivkeyCount(); i++) {
@@ -758,6 +771,7 @@ if(window.rcmail) {
         $("#openpgpjs_privkeys tbody tr:last td.person").text(person);
       }
     }
+*/
 
     // fill key manager generation identity selector
     $("#gen_ident").html("");

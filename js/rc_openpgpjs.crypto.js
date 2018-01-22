@@ -214,10 +214,9 @@ rc_openpgpjs_crypto.prototype.getFingerprint = function (i, getPrivate, niceform
 	return fingerprint;
 }
 
-rc_openpgpjs_crypto.prototype.getKeyID = function (i, getPrivate) {
-	if(typeof(getPrivate) == "undefined") {
-		getPrivate = false;
-	}
+rc_openpgpjs_crypto.prototype.getKeyID = function (i, getPrivate, full) {
+	if (typeof getPrivate == "undefined") { getPrivate = false; }
+        if (typeof full == "undefined") { full = false; }
 
         var key_id;
 
@@ -227,9 +226,13 @@ rc_openpgpjs_crypto.prototype.getKeyID = function (i, getPrivate) {
 	        key_id = this.keyring.privateKeys.keys[i].primaryKey.getKeyId();
 	}
         
-        key_id_str = "0x" + openpgp.util.hexstrdump(key_id.bytes).toUpperCase().substring(8);
-
-	return key_id_str;
+        const fullstr = openpgp.util.hexstrdump(key_id.bytes);
+        if (full) {
+          return fullstr;
+        } else {
+          const key_id_str = "0x" + openpgp.util.hexstrdump(key_id.bytes).toUpperCase().substring(8);
+          return key_id_str;
+        }
 }
 
 rc_openpgpjs_crypto.prototype.getPerson = function (i, j, getPrivate) {
@@ -290,7 +293,6 @@ rc_openpgpjs_crypto.prototype.importPubkey = function (key) {
 		this.keyring.publicKeys.importKey(key);
 		this.keyring.store();
 	} catch(e) {
-		console.log(e);
 		return false;
 	}
 	return true;
@@ -326,11 +328,18 @@ rc_openpgpjs_crypto.prototype.removeKey = function (i, getPrivate) {
 		getPrivate = false;
 	}
 
-	if(getPrivate) {
-		return this.keyring.removePrivateKey(i);
+        var key_id = this.getKeyID(i, getPrivate, true);
+
+        var ret;
+	if (getPrivate) {
+		ret = this.keyring.privateKeys.removeForId(key_id);
 	}
 
-	return this.keyring.removePublicKey(i);
+	ret = this.keyring.publicKeys.removeForId(key_id);
+
+        if (ret !== null) {
+          this.keyring.store();
+        }
 }
 
 rc_openpgpjs_crypto.prototype.verifyBasicSignatures = function (i) {
@@ -373,9 +382,9 @@ rc_openpgpjs_crypto.prototype.exportArmored = function (i, getPrivate) {
 	}
 
 	if(getPrivate) {
-		return this.keyring.privateKeys[i].armored;
+		return this.keyring.privateKeys.keys[i].armor();
 	} else {
-		return this.keyring.publicKeys[i].armored;
+		return this.keyring.publicKeys.keys[i].armor();
 	}
 }
 
