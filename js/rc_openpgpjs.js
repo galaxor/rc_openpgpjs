@@ -552,6 +552,7 @@ if(window.rcmail) {
 
     return true;
   }
+  window.importPubKey = importPubKey;
 
   /**
    * op: (get|index|vindex) string operation to perform
