@@ -525,6 +525,7 @@ if(window.rcmail) {
     rcmail.http_post("plugin.pks_search", "search=" + id + "&op=get");
     return;
   }
+  window.importFromSKS=importFromSKS;
 
   /**
    * Imports armored public key into the key manager
@@ -605,7 +606,8 @@ if(window.rcmail) {
 
       $("#openpgpjs_search_results").html("");
       for(var i = 0; i < result.length; i++) {
-        $("#openpgpjs_search_results").append("<tr class='" + (i%2 !== 0 ? " odd" : "") + "'><td><a href='#' onclick='importFromSKS(\"" + result[i][0] + "\");'>Import</a></td><td>" + result[i][0] + "</td>" + "<td>" + result[i][1] + "</td></tr>");
+        $("#openpgpjs_search_results").append("<tr class='" + (i%2 !== 0 ? " odd" : "") + "'><td><a href='#' onclick='importFromSKS(\"" + result[i].key_id + "\");'>Import</a></td><td class=\"result-txt\"><pre></pre></td></tr>");
+        $("#openpgpjs_search_results tr td.result-txt pre").text(result[i].text);
       }
     } else if(response.op === "get") {
       k = JSON.parse(response.message);

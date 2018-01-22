@@ -207,6 +207,35 @@ class rc_openpgpjs extends rcube_plugin {
   }
 
   /**
+   * The public key server will return some HTML.
+   * Parse out the values we're interested in.
+   */
+  function parse_hkp_search_results($html) {
+    $DOM = new DOMDocument;
+    $DOM->loadHTML($html);
+
+    $results = array();
+    $pre = $DOM->getElementsByTagName("pre");
+
+    for ($i=1; $i<$pre->length; $i++) {
+      $result = $pre->item($i);
+
+      $url = $result->getElementsByTagName("a")->item(0)->getAttribute("href");
+
+      $parsed_url = parse_url($url);
+      $query = array();
+      parse_str($parsed_url['query'], $query);
+
+      $results[] = array(
+        'key_id' => $query['search'],
+        'text' => $result->textContent,
+      );
+    }
+
+    return $results;
+  }
+
+  /**
    * This Public Key Server proxy is written to circumvent Access-Control-Allow-Origin
    * limitations. It also provides a layer of security as HKP normally doesn't
    * support HTTPS; essentially preventing MITM if the Roundcube installation
@@ -251,15 +280,12 @@ class rc_openpgpjs extends rcube_plugin {
         // TODO Fix search regex to match 32/64-bit str
         preg_match_all("/\/pks\/lookup\?op=vindex&amp;search=(.*)\">(.*)<\/a>/", $result, $m);
 
-        if(count($m[0]) > 0) {
-          $found = array();
-          for($i = 0; $i < count($m[0]); $i++)
-            $found[] = array($m[1][$i], $m[2][$i]);
-          return $this->rc->output->command(
-            'plugin.pks_search',
-            array('message' => json_encode($found),
-                  'op' => htmlspecialchars($op)));
-        }
+        $results = $this->parse_hkp_search_results($result);
+
+        return $this->rc->output->command(
+          'plugin.pks_search',
+          array('message' => json_encode($results),
+                'op' => htmlspecialchars($op)));
       } else {
         preg_match("/Error handling request: (.*)<\/body>/", $result, $m);
         return $this->rc->output->command(
