@@ -240,6 +240,8 @@ rc_openpgpjs_crypto.prototype.getPerson = function (i, j, getPrivate) {
 		getPrivate = false;
 	}
 
+        var person;
+
 	if(getPrivate == false) {
 		person = (this.keyring.publicKeys.keys[i].getUserIds())[j];
 	} else {
@@ -247,6 +249,22 @@ rc_openpgpjs_crypto.prototype.getPerson = function (i, j, getPrivate) {
 	}
 
 	return person;
+}
+
+rc_openpgpjs_crypto.prototype.getPersons = function (i, getPrivate) {
+	if(typeof(getPrivate) == "undefined") {
+		getPrivate = false;
+	}
+
+        var persons;
+
+	if(getPrivate == false) {
+		persons = (this.keyring.publicKeys.keys[i].getUserIds());
+	} else {
+		persons = (this.keyring.privateKeys.keys[i].getUserIds());
+	}
+
+	return persons;
 }
 
 rc_openpgpjs_crypto.prototype.getPubkeyForAddress = function (address) {

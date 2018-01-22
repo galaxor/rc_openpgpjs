@@ -87,3 +87,11 @@ ul.toolbarmenu li span.icon.key_manager {
         padding: 8px 12px 8px 30px;
 }
 
+table.records-table td.person ul {
+	margin: 0;
+	padding: 0;
+}
+
+table.records-table td.person li {
+	display: block;
+}

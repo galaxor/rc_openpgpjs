@@ -698,7 +698,7 @@ if(window.rcmail) {
     for (var i = 0; i < rc_openpgpjs_crypto.getPubkeyCount(); i++) {
       var key_id = rc_openpgpjs_crypto.getKeyID(i);
       var fingerprint = rc_openpgpjs_crypto.getFingerprint(i);
-      var person = rc_openpgpjs_crypto.getPerson(i, 0);
+      var persons = rc_openpgpjs_crypto.getPersons(i);
       var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i);
       var statusMark = rc_openpgpjs_crypto.verifyBasicSignatures(i);
       var status;
@@ -736,14 +736,17 @@ if(window.rcmail) {
       var result = "<tr>" +
         "<td>" + key_id      + "</td>" +
         "<td>" + fingerprint + "</td>" +
-        "<td class=\"person\"></td>" +
+        "<td class=\"person\"><ul></ul></td>" +
         "<td>" + length_alg  + "</td>" +
         "<td>" + status      + "</td>" +
         "<td class=\"actions\">" + exp + del   + "</td>" +
         "</tr>";
       $("#openpgpjs_pubkeys tbody").append(result);
       // Set "person" using the text property to get html escaped.
-      $("#openpgpjs_pubkeys tbody tr:last td.person").text(person);
+      persons.forEach(function (person) { 
+        $("#openpgpjs_pubkeys tbody tr:last td.person ul").append('<li></li>');
+        $("#openpgpjs_pubkeys tbody tr:last td.person ul li:last").text(person);
+      });
       $("#openpgpjs_pubkeys tbody tr:last td.actions a.del_key").click(keyRemoveConfirmer(i));
     }
 
