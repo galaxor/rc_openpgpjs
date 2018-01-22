@@ -236,6 +236,27 @@ class rc_openpgpjs extends rcube_plugin {
   }
 
   /**
+   * The public key server will return some HTML.
+   * Parse out the values we're interested in.
+   * In this case, it's just some error text.
+   */
+  function parse_hkp_error_results($html) {
+    $DOM = new DOMDocument;
+    $DOM->loadHTML($html);
+
+    $results = array();
+    $title = $DOM->getElementsByTagName("title")->item(0);
+    $body = $DOM->getElementsByTagName("body")->item(0);
+
+    // The client will be displaying this text.
+    // Let's make sure it's not html.
+    return array(
+      'title' => $title->textContent,
+      'body'  => $body->textContent,
+    );
+  }
+
+  /**
    * This Public Key Server proxy is written to circumvent Access-Control-Allow-Origin
    * limitations. It also provides a layer of security as HKP normally doesn't
    * support HTTPS; essentially preventing MITM if the Roundcube installation
@@ -284,29 +305,17 @@ class rc_openpgpjs extends rcube_plugin {
 
         return $this->rc->output->command(
           'plugin.pks_search',
-          array('message' => json_encode($results),
+          array('status' => $status,
+                'message' => json_encode($results),
                 'op' => htmlspecialchars($op)));
       } else {
-        preg_match("/Error handling request: (.*)<\/body>/", $result, $m);
         return $this->rc->output->command(
           'plugin.pks_search',
-          array('message' => "ERR: " . htmlspecialchars($m[1]),
+          array('status' => $status,
+                'message' => json_encode($this->parse_hkp_error_results($result)),
                 'op' => htmlspecialchars($op)));
       }
     } elseif($op == "get") {
-      if(preg_match("/^0x[0-9A-F]{8}$/i", $search)) {
-        define("32_BIT_KEY", true);
-        define("64_BIT_KEY", false);
-      } elseif(preg_match("/^0x[0-9A-F]{16}$/i", $search)) {
-        define("32_BIT_KEY", false);
-        define("64_BIT_KEY", true);
-      } else {
-        return $this->rc->output->command(
-          'plugin.pks_search',
-          array('message' => "ERR: Incorrect search format for this operation",
-                'op' => htmlspecialchars($op)));
-      }
-
       $ch = curl_init();
       curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
       curl_setopt($ch, CURLOPT_URL, "http://pool.sks-keyservers.net:11371/pks/lookup?op=get&search={$search}");
@@ -318,7 +327,14 @@ class rc_openpgpjs extends rcube_plugin {
         preg_match_all("/-----BEGIN PGP PUBLIC KEY BLOCK-----(.*)-----END PGP PUBLIC KEY BLOCK-----/s", $result, $m);
         return $this->rc->output->command(
           'plugin.pks_search',
-          array('message' => json_encode($m),
+          array('status' => $status,
+                'message' => json_encode($m),
+                'op' => htmlspecialchars($op)));
+      } else {
+        return $this->rc->output->command(
+          'plugin.pks_search',
+          array('status' => $status,
+                'message' => json_encode($this->parse_hkp_error_result($result)),
                 'op' => htmlspecialchars($op)));
       }
     }

@@ -67,3 +67,6 @@ $labels['openpgp_title'] = 'Message Encryption';
 $labels['expired'] = "Expired";
 $labels['revoked'] = "Revoked";
 $labels['no_self_cert'] = "No self cert";
+
+$labels['unknown_error'] = "Received an unknown error from the server.";
+$labels['server_said'] = "The server said:";

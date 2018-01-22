@@ -581,28 +581,49 @@ if(window.rcmail) {
     $("#openpgpjs_search_input").removeAttr("disabled");
     $("#openpgpjs_search_submit").removeAttr("disabled");
 
-    if(response.message === "ERR: Missing param") {
-      console.log("Missing param");
-      return false;
-    }
+    if (response.status != 200) {
+      // See if it's one of the errors we know.
+      // If it is, that gives us the opportunity to display a localized version
+      // of the error message, along with the original.
 
-    if(response.message === "ERR: Invalid operation") {
-      console.log("Invalid operation");
-      return false;
-    }
-
-    if(response.message === "ERR: No keys found") {
-        alert(rcmail.gettext("search_no_keys", "rc_openpgpjs"));
-        return false;
-    }
-
-    if(response.op === "index") {
+      var result;
       try {
         result = JSON.parse(response.message);
       } catch(e) {
-        alert(rcmail.gettext("search_no_keys", "rc_openpgpjs"));
+        const full_errmsg = rcmail.gettext("unknown_error", "rc_openpgpjs")+"\n"+response.message;
+        alert(full_errmsg);
         return false;
       }
+
+      var errmsg;
+      if (result.title == "No results found") {
+        errmsg = rcmail.gettext("search_no_keys", "rc_openpgpjs");
+      } else {
+        errmsg = rcmail.gettext("unknown_error", "rc_openpgpjs");
+      }
+        
+      const full_errmsg = errmsg+"\n"
+                          + rcmail.gettext("server_said", "rc_openpgpjs")+"\n"
+                          + response.status+"\n"
+                          + result.body;
+
+      alert(full_errmsg);
+      return false;
+    }
+
+    if(response.op === "index") {
+      var errmsg;
+      try {
+        result = JSON.parse(response.message);
+      } catch(e) {
+        const full_errmsg = rcmail.gettext("unknown_error", "rc_openpgpjs")+"\n"+response.message;
+        alert(full_errmsg);
+        return false;
+      }
+
+      // We haven't included the assert library, but I'm leaving this here as documentation.
+      // assert.equal(typeof result, "array");
+      // assert(result.length > 0);
 
       $("#openpgpjs_search_results").html("");
       for(var i = 0; i < result.length; i++) {
