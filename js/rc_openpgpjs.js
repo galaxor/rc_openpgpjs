@@ -232,7 +232,7 @@ if(window.rcmail) {
       $("#import_button").removeClass("hidden");
     },
     function (err) {
-      $("#generate_key_error").html(err);
+      $("#generate_key_error p").html(err);
       $("#generate_key_error").removeClass("hidden");
     });
 
@@ -247,13 +247,15 @@ if(window.rcmail) {
   function importGenerated() {
     $("#import_button").addClass("hidden");
 
-    if(importPrivKey($("#generated_private").html(), $("#gen_passphrase").val())) {
+    if (importPrivKey($("#generated_private").html(), $("#gen_passphrase").val(), '#generate_key_error')
+        && importPubKey($("#generated_public").html(), "#generate_key_error"))
+    {
+      $("#gen_passphrase").val("");
+      $("#gen_passphrase_verify").val("");
       alert(rcmail.gettext("import_gen", "rc_openpgpjs"));
     }
-
-    $("#gen_passphrase").val("");
-    $("#gen_passphrase_verify").val("");
   }
+  window.importGenerated = importGenerated;
 
   /**
    * Set passphrase.
@@ -530,19 +532,23 @@ if(window.rcmail) {
    * Imports armored public key into the key manager
    *
    * @param key {String} The armored public key
+   * @param err_div_id {String} A jquery selector; this is where to put any error text.
    * @return {Bool} Import successful
    */
-  function importPubKey(key) {
+  function importPubKey(key, err_div_id) {
+    if (typeof err_div_id == "undefined") { err_div_id = "#import_pub_error"; }
+
     try {
       rc_openpgpjs_crypto.importPubkey(key);
       updateKeyManager();
       $("#importPubkeyField").val("");
-      $("#import_pub_error").addClass("hidden");
+      $(err_div_id).addClass("hidden");
     } catch(e) {
-      $("#import_pub_error").removeClass("hidden");
-      $("#import_pub_error p").html(rcmail.gettext("import_failed", "rc_openpgpjs"));
-      alert(rcmail.gettext("import_fail", "rc_openpgpjs"));
-	alert(e);
+      $(err_div_id).removeClass("hidden");
+      $(err_div_id+" p").html(rcmail.gettext("import_failed", "rc_openpgpjs"));
+      $(err_div_id+" p").append("<ul></ul>");
+      $(e).each(function (num, err) { $(err_div_id+" p ul").append("<li>"+err+"</li>"); });
+
       return false;
     }
 
@@ -618,35 +624,29 @@ if(window.rcmail) {
    * @param passphrase {String} The corresponding passphrase
    * @return {Bool} Import successful
    */
-  function importPrivKey(key, passphrase) {
+  function importPrivKey(key, passphrase, err_div_id) {
+    if (typeof err_div_id == "undefined") { err_div_id = '#import_priv_error'; }
+
     if(passphrase === "") {
-      $("#import_priv_error").removeClass("hidden");
-      $("#import_priv_error p").html(rcmail.gettext("enter_pass", "rc_openpgpjs"));
+      $(err_div_id).removeClass("hidden");
+      $(err_div_id+" p").html(rcmail.gettext("enter_pass", "rc_openpgpjs"));
       return false;
     }
 
     try {
-      privkey_obj = rc_openpgpjs_crypto.parsePrivkey(key);
+      rc_openpgpjs_crypto.importPrivkey(key);
     } catch(e) {
-      $("#import_priv_error").removeClass("hidden");
-      $("#import_priv_error p").html(rcmail.gettext("import_failed", "rc_openpgpjs"));
+      $(err_div_id).removeClass("hidden");
+      $(err_div_id+" p").html(rcmail.gettext("import_failed", "rc_openpgpjs"));
+      $(err_div_id+" p").append("<ul></ul>");
+      $(e).each(function (num, err) { $(err_div_id+" p ul").append("<li>"+err+"</li>"); });
       return false;
     }
 
-    if(!privkey_obj.decryptSecretMPIs(passphrase)) {
-      $("#import_priv_error").removeClass("hidden");
-      $("#import_priv_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
-      return false;
-    }
-
-    // Extract pubkey from privkey and import
-	pubkey = privkey_obj.extractPublicKey();
-	rc_openpgpjs_crypto.importPubkey(pubkey);
-	rc_openpgpjs_crypto.importPrivkey(key, passphrase);
     updateKeyManager();
     $("#importPrivkeyField").val("");
     $("#passphrase").val("");
-    $("#import_priv_error").addClass("hidden");
+    $(err_div_id).addClass("hidden");
 
     return true;
   }

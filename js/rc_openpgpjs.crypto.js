@@ -292,23 +292,29 @@ rc_openpgpjs_crypto.prototype.importPubkey = function (key) {
 	return true;
 }
 
-rc_openpgpjs_crypto.prototype.importPrivkey = function (key, passphrase) {
-	try {
-		this.keyring.importPrivateKey(key, passphrase);
-		this.keyring.store();
-	} catch(e) {
-		return false;
-	}
+rc_openpgpjs_crypto.prototype.importPrivkey = function (key) {
+	var err = this.keyring.privateKeys.importKey(key); 
+        if (err !== null) {
+            throw(err);
+        } else {
+            this.keyring.store();
+        }
 
-	return true;
-}
-
-rc_openpgpjs_crypto.prototype.parsePrivkey = function (key) {
-	try {
-		return openpgp.read_privateKey(key)[0];
-	} catch(e) {
-		return false;
-	}
+        // Now import the public key.
+        // It's unfortunate that we have to read the key again, but I couldn't
+        // think of a better way that didn't involve repeating some internal
+        // logic of the library.
+        var privKey = openpgp.key.readArmored(key);
+        const keyring = this.keyring;
+        privKey.keys.forEach(function (key) {
+          var err = keyring.publicKeys.importKey(key.toPublic().armor());
+          if (err !== null) {
+              throw(err);
+          } else {
+              keyring.store();
+          }
+        });
+        window.keyring = this.keyring;
 }
 
 rc_openpgpjs_crypto.prototype.removeKey = function (i, private) {
