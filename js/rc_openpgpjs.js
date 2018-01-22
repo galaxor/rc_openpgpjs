@@ -699,7 +699,25 @@ if(window.rcmail) {
       var fingerprint = rc_openpgpjs_crypto.getFingerprint(i);
       var person = rc_openpgpjs_crypto.getPerson(i, 0);
       var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i);
-//       var status = (rc_openpgpjs_crypto.verifyBasicSignatures(i) ? rcmail.gettext("valid", "rc_openpgpjs") : rcmail.gettext("invalid", "rc_openpgpjs"));
+      var statusMark = rc_openpgpjs_crypto.verifyBasicSignatures(i);
+      var status;
+      // The most concise way to put this would be to say
+      //   status = rcmail.gettext(statusMark, "rc_openpgpjs");
+      // However, in GNU Gettext, it is a bad idea to use a variable ast the
+      // gettext text, because there are automated tools that look for all the
+      // labels mentioned in the code, and make files for translators to work
+      // with.  If you use anything other than a string literal, it breaks that
+      // workflow for translators.
+      // I don't know if roundcube's home-grown gettext has similar tools, but
+      // I figured it'd be best to play it safe.
+      switch (statusMark) {
+      case 'expired': status = rcmail.gettext("expired", "rc_openpgpjs"); break;
+      case 'revoked': status = rcmail.gettext("revoked", "rc_openpgpjs"); break;
+      case 'valid': status = rcmail.gettext("valid", "rc_openpgpjs"); break;
+      case 'no_self_cert': status = rcmail.gettext("no_self_cert", "rc_openpgpjs"); break;
+      case 'invalid':
+      default: status = rcmail.gettext("invalid", "rc_openpgpjs"); break;
+      }
 //       var del = "<a href='#' onclick='if(confirm(\"" + rcmail.gettext('delete_pub', 'rc_openpgpjs') + "\")) { rc_openpgpjs_crypto.removeKey(" + i + "); updateKeyManager(); }'>" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
 //       var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i)) + "\" download=\"pubkey_" + rc_openpgpjs_crypto.getKeyID(i) + ".asc\">Export</a> ";
 

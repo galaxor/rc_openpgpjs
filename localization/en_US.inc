@@ -63,3 +63,7 @@ $labels['openpgp_enabled'] = "Enabled";
 $labels['warn_on_unencrypted'] = "Warn before sending unencrypted messages";
 $labels['always_attachKey'] = "Attach public key to all outgoing message";
 $labels['openpgp_title'] = 'Message Encryption';
+
+$labels['expired'] = "Expired";
+$labels['revoked'] = "Revoked";
+$labels['no_self_cert'] = "No self cert";
