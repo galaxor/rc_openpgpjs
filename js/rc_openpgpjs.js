@@ -627,9 +627,10 @@ if(window.rcmail) {
       // assert(result.length > 0);
 
       $("#openpgpjs_search_results").html("");
+      console.log(result);
       for(var i = 0; i < result.length; i++) {
         $("#openpgpjs_search_results").append("<tr class='" + (i%2 !== 0 ? " odd" : "") + "'><td><a href='#' onclick='importFromSKS(\"" + result[i].key_id + "\");'>Import</a></td><td class=\"result-txt\"><pre></pre></td></tr>");
-        $("#openpgpjs_search_results tr td.result-txt pre").text(result[i].text);
+        $("#openpgpjs_search_results tr:last td.result-txt pre").text(result[i].text);
       }
     } else if(response.op === "get") {
       k = JSON.parse(response.message);
