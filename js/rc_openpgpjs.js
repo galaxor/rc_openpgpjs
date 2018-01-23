@@ -245,7 +245,7 @@ if(window.rcmail) {
   function importGenerated() {
     $("#import_button").addClass("hidden");
 
-    if (importPrivKey($("#generated_private").html(), $("#gen_passphrase").val(), '#generate_key_error')
+    if (importPrivKey($("#generated_private").html(), '#generate_key_error')
         && importPubKey($("#generated_public").html(), "#generate_key_error"))
     {
       $("#gen_passphrase").val("");
@@ -647,14 +647,8 @@ if(window.rcmail) {
    * @param passphrase {String} The corresponding passphrase
    * @return {Bool} Import successful
    */
-  function importPrivKey(key, passphrase, err_div_id) {
+  function importPrivKey(key, err_div_id) {
     if (typeof err_div_id == "undefined") { err_div_id = '#import_priv_error'; }
-
-    if(passphrase === "") {
-      $(err_div_id).removeClass("hidden");
-      $(err_div_id+" p").html(rcmail.gettext("enter_pass", "rc_openpgpjs"));
-      return false;
-    }
 
     try {
       rc_openpgpjs_crypto.importPrivkey(key);
@@ -668,11 +662,11 @@ if(window.rcmail) {
 
     updateKeyManager();
     $("#importPrivkeyField").val("");
-    $("#passphrase").val("");
     $(err_div_id).addClass("hidden");
 
     return true;
   }
+  window.importPrivKey = importPrivKey;
 
   /**
    * Select a private key.
@@ -713,40 +707,54 @@ if(window.rcmail) {
   }
 
   /**
-   * Updates key manager public keys table, private keys table
-   * and identy selector.
+   * Fill key manager public/private key table
+   * @param usePrivate {Boolean} Should we fill the private table? If not, we fill the public table.
    */
-  function updateKeyManager() {
-    // fill key manager public key table
-    $("#openpgpjs_pubkeys tbody").empty();
-    for (var i = 0; i < rc_openpgpjs_crypto.getPubkeyCount(); i++) {
-      var key_id = rc_openpgpjs_crypto.getKeyID(i);
-      var fingerprint = rc_openpgpjs_crypto.getFingerprint(i);
-      var persons = rc_openpgpjs_crypto.getPersons(i);
-      var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i);
-      var statusMark = rc_openpgpjs_crypto.verifyBasicSignatures(i);
+  function fillTable(usePrivate) {
+    const usePublic = !usePrivate;
+
+    var getKeyCount = (usePrivate)? rc_openpgpjs_crypto.getPrivkeyCount.bind(rc_openpgpjs_crypto)
+                                   : rc_openpgpjs_crypto.getPubkeyCount.bind(rc_openpgpjs_crypto);
+
+    const tableId = (usePrivate)? "#openpgpjs_privkeys" : "#openpgpjs_pubkeys";
+    $(tableId + " tbody").empty();
+
+    for (var i = 0; i < getKeyCount(); i++) {
+      var key_id = rc_openpgpjs_crypto.getKeyID(i, usePrivate);
+      var fingerprint = rc_openpgpjs_crypto.getFingerprint(i, usePrivate);
+      var persons = rc_openpgpjs_crypto.getPersons(i, usePrivate);
+      var length_alg = rc_openpgpjs_crypto.getAlgorithmString(i, usePrivate);
+      var statusMark;
       var status;
-      // The most concise way to put this would be to say
-      //   status = rcmail.gettext(statusMark, "rc_openpgpjs");
-      // However, in GNU Gettext, it is a bad idea to use a variable ast the
-      // gettext text, because there are automated tools that look for all the
-      // labels mentioned in the code, and make files for translators to work
-      // with.  If you use anything other than a string literal, it breaks that
-      // workflow for translators.
-      // I don't know if roundcube's home-grown gettext has similar tools, but
-      // I figured it'd be best to play it safe.
-      switch (statusMark) {
-      case 'expired': status = rcmail.gettext("expired", "rc_openpgpjs"); break;
-      case 'revoked': status = rcmail.gettext("revoked", "rc_openpgpjs"); break;
-      case 'valid': status = rcmail.gettext("valid", "rc_openpgpjs"); break;
-      case 'no_self_cert': status = rcmail.gettext("no_self_cert", "rc_openpgpjs"); break;
-      case 'invalid':
-      default: status = rcmail.gettext("invalid", "rc_openpgpjs"); break;
+      if (usePublic) {
+        statusMark = rc_openpgpjs_crypto.verifyBasicSignatures(i);
+        // The most concise way to put this would be to say
+        //   status = rcmail.gettext(statusMark, "rc_openpgpjs");
+        // However, in GNU Gettext, it is a bad idea to use a variable ast the
+        // gettext text, because there are automated tools that look for all the
+        // labels mentioned in the code, and make files for translators to work
+        // with.  If you use anything other than a string literal, it breaks that
+        // workflow for translators.
+        // I don't know if roundcube's home-grown gettext has similar tools, but
+        // I figured it'd be best to play it safe.
+        switch (statusMark) {
+        case 'expired': status = rcmail.gettext("expired", "rc_openpgpjs"); break;
+        case 'revoked': status = rcmail.gettext("revoked", "rc_openpgpjs"); break;
+        case 'valid': status = rcmail.gettext("valid", "rc_openpgpjs"); break;
+        case 'no_self_cert': status = rcmail.gettext("no_self_cert", "rc_openpgpjs"); break;
+        case 'invalid':
+        default: status = rcmail.gettext("invalid", "rc_openpgpjs"); break;
+        }
       }
-      const keyRemoveConfirmer = function (i) {
+
+      var keyRemoveConfirmer = function (i, usePrivate) {
         return function () {
-          if (confirm(rcmail.gettext('delete_pub', 'rc_openpgpjs'))) {
-            if (rc_openpgpjs_crypto.removeKey(i) === null) {
+          var confirmed = false;
+          var confirmText = (usePrivate)? rcmail.gettext('delete_priv', 'rc_openpgpjs')
+                                        : rcmail.gettext('delete_pub', 'rc_openpgpjs');
+
+          if (confirm(confirmText, 'rc_openpgpjs')) {
+            if (rc_openpgpjs_crypto.removeKey(i, usePrivate) === null) {
               throw("Failed to delete the key "+key_id);
             } else {
               updateKeyManager();
@@ -755,24 +763,38 @@ if(window.rcmail) {
         };
       };
       var del = "<a href=\"#\" class=\"del_key\">" + rcmail.gettext('delete', 'rc_openpgpjs') + "</a>";
-      var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i)) + "\" download=\"pubkey_" + key_id + ".asc\">Export</a> ";
+      var export_filename_prefix = (usePrivate)? "privkey_" : "pubkey_";
+      var exp = "<a href=\"data:asc," + encodeURIComponent(rc_openpgpjs_crypto.exportArmored(i, usePrivate)) + "\" download=\"" + export_filename_prefix + key_id + ".asc\">Export</a> ";
 
       var result = "<tr>" +
         "<td>" + key_id      + "</td>" +
         "<td>" + fingerprint + "</td>" +
         "<td class=\"person\"><ul></ul></td>" +
         "<td>" + length_alg  + "</td>" +
-        "<td>" + status      + "</td>" +
+        ((usePublic)? ("<td>" + status      + "</td>") : "") +
         "<td class=\"actions\">" + exp + del   + "</td>" +
         "</tr>";
-      $("#openpgpjs_pubkeys tbody").append(result);
+
+      $(tableId + " tbody").append(result);
       // Set "person" using the text property to get html escaped.
       persons.forEach(function (person) { 
-        $("#openpgpjs_pubkeys tbody tr:last td.person ul").append('<li></li>');
-        $("#openpgpjs_pubkeys tbody tr:last td.person ul li:last").text(person);
+        $(tableId + " tbody tr:last td.person ul").append('<li></li>');
+        $(tableId + " tbody tr:last td.person ul li:last").text(person);
       });
-      $("#openpgpjs_pubkeys tbody tr:last td.actions a.del_key").click(keyRemoveConfirmer(i));
+      $(tableId + " tbody tr:last td.actions a.del_key").click(keyRemoveConfirmer(i, usePrivate));
     }
+  }
+
+  /**
+   * Updates key manager public keys table, private keys table
+   * and identy selector.
+   */
+  function updateKeyManager() {
+    // Fill the key manager public key table.
+    fillTable(false);
+
+    // Fill the key manager private key table.
+    fillTable(true);
 
 /*
     // fill key manager private key table

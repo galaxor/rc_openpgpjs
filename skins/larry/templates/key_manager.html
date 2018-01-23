@@ -52,10 +52,9 @@
           <span class="ui-icon ui-icon-alert"></span>
           <p></p>
         </div>
-        <textarea id='importPrivkeyField'></textarea><br /><br />
-        <label for="import_passphrase"><roundcube:label name="rc_openpgpjs.passphrase" />:</label> <input type='password' id='import_passphrase' />
+        <textarea id='importPrivkeyField'></textarea><br />
         <div class="formbuttons">
-          <input type='button' class='button mainaction' value='<roundcube:label name="rc_openpgpjs.import" />' onclick='importPrivKey($("#importPrivkeyField").val(), $("#import_passphrase").val());' /></p>
+          <input type='button' class='button mainaction' value='<roundcube:label name="rc_openpgpjs.import" />' onclick='importPrivKey($("#importPrivkeyField").val());' /></p>
         </div>
       </fieldset>
     </div>
