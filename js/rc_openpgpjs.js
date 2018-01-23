@@ -31,17 +31,6 @@ if(window.rcmail) {
       rcmail.display_message(rcmail.gettext("no_window_crypto", "rc_openpgpjs"), "error");
     }
 
-    // When you're searching for a key, you should be able to either press
-    // enter in the search box or click the submit button.  This makes it so
-    // that pressing enter is equivalent to clicking the button.
-    // TODO: Maybe a better way to do this would be to move the search function
-    // from onclick to onsubmit.  Then the browser does this more naturally.
-    $('#openpgpjs_key_search #openpgpjs_search_input').keypress(function (event) {
-      if (event.originalEvent.code == "Enter") {
-        $('#openpgpjs_key_search #openpgpjs_search_submit').click();
-      }
-    });
-
     this.passphrase = "";
     rcmail.addEventListener("plugin.pks_search", pks_search_callback);
 
