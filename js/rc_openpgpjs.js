@@ -301,22 +301,23 @@ if(window.rcmail) {
     var recipients = [];
     var matches = "";
     var fields = ["_to", "_cc", "_bcc"];
-    var re = /[a-zA-Z0-9\._%+-]+@[a-zA-Z0-9\._%+-]+\.[a-zA-Z]{2,4}/g;
+    var re = /[a-zA-Z0-9\._%+-]+@[a-zA-Z0-9\._%+-]+/g;
 
     for(field in fields) {
       matches = $("#" + fields[field]).val().match(re);
 
-      for(key in matches) {
-        recipients[c] = matches[key];
+      for(var i in matches) {
+        recipients[c] = matches[i];
         c++;
       }
     }
 
     for (var i = 0; i < recipients.length; i++) {
-      var recipient = recipients[i].replace(/(.+?<)/, "").replace(/>/, "");
+      var recipient = recipients[i];
       var pubkey = rc_openpgpjs_crypto.getPubkeyForAddress(recipient);
+      // XXX If we find more than one pubkey, we should let the user choose.
       if(typeof(pubkey[0]) != "undefined") {
-        pubkeys.push(pubkey[0].obj);
+        pubkeys.push(pubkey[0]);
       } else {
         // Querying PKS for recipient pubkey
        if(confirm(rcmail.gettext("missing_recipient_pubkey", "rc_openpgpjs") + recipient)) {
@@ -332,29 +333,29 @@ if(window.rcmail) {
     return pubkeys;
   }
 
+  function fetchSendersEmail() {
+    var identities = JSON.parse($("#openpgpjs_identities").text());
+    var identity_id = $("#_from>option:selected").val();
+    var identity = $.grep(identities, function (e) { return e.identity_id == identity_id; })[0];
+    if (typeof identity == "undefined") {
+      return undefined;
+    }
+
+    var address = identity.email;
+    
+    return address;
+  }
+
   /**
    * Get the user's public key
    */
-  function fetchSendersPubkey(armored) {
+  function fetchSendersPubkey() {
+    var address = fetchSendersEmail();
     
-    if (typeof(armored) == "undefined") {
-      armored = false;
-    }
+    var pubkeys = rc_openpgpjs_crypto.getPubkeyForAddress(address);
 
-    var re = /[a-zA-Z0-9\._%+-]+@[a-zA-Z0-9\._%+-]+\.[a-zA-Z]{2,4}/g;
-    var address = $("#_from>option:selected").html().match(re);
-    
-    if (address.length > 0) {
-      var pubkey = rc_openpgpjs_crypto.getPubkeyForAddress(address[0]);
-
-      if(typeof(pubkey[0]) != "undefined") {
-        if (armored)
-          return pubkey[0].armored;
-        else
-          return pubkey[0].obj;
-      }  
-    }
-    return false;
+    // XXX If we find more than one key, we should give the user the choice of which to use!
+    return pubkeys[0];
   }
 
   /**
@@ -384,10 +385,10 @@ if(window.rcmail) {
     }
 
     // send the user's public key to the server so it can be sent as attachment
-    var pubkey_sender = fetchSendersPubkey(true);
+    var pubkey_sender = fetchSendersPubkey();
     if (pubkey_sender) {
         var lock = rcmail.set_busy(true, 'loading');
-        rcmail.http_post('plugin.pubkey_save', { _pubkey: pubkey_sender }, lock);
+        rcmail.http_post('plugin.pubkey_save', { _pubkey: pubkey_sender.armor() }, lock);
     }
     // end send user's public key to the server
 
@@ -446,6 +447,7 @@ if(window.rcmail) {
        !$("#openpgpjs_sign").is(":checked")) {
       // Fetch recipient pubkeys
       var pubkeys = fetchRecipientPubkeys();
+      console.log("PK", pubkeys);
       if(pubkeys.length === 0) {
         return false;
       }
@@ -459,15 +461,20 @@ if(window.rcmail) {
           return false;
         }
       }
+      console.log("PKB", pubkeys);
       // end add user's public key
 
       var text = $("textarea#composebody").val();
-      var encrypted = rc_openpgpjs_crypto.encrypt(pubkeys, text);
-      if(encrypted) {
-        $("textarea#composebody").val(encrypted);
-        this.finished_treating = 1;
-        return true;
-      }
+      console.log("Plaintext", text);
+      console.log("Pubkeys", pubkeys);
+      rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (evt, encrypted) {
+        console.log("Ciphertext", encrypted.data);
+        if(encrypted.data) {
+          $("textarea#composebody").val(encrypted.data);
+          evt.finished_treating = 1;
+          return true;
+        }
+      }).bind(undefined, this));
     }
 
     // Sign only

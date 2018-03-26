@@ -60,20 +60,15 @@ rc_openpgpjs_crypto.prototype.encrypt = function (pubkeys, text, sign, privkey, 
         return;
     }
 
-    try {
-      const encrypted = openpgp.encrypt(text, pubkeys, privkey, passphrase, undefined, true);
-      return(encrypted);
-    } catch (e) {
-      return false;
-    }
+    const encrypted = openpgp.encrypt(text, pubkeys, privkey, passphrase, undefined, true);
+    return(encrypted);
   }
 
-  try {
-    const encrypted = openpgp.encrypt(text, pubkeys, undefined, undefined, undefined, true);
-    return(encrypted);
-  } catch(e) {
-    return false;
-  }
+  const promise = openpgp.encrypt({
+    data: new String(text),
+    publicKeys: pubkeys
+  });
+  return(promise);
 }
 
 /**
@@ -268,7 +263,7 @@ rc_openpgpjs_crypto.prototype.getPersons = function (i, getPrivate) {
 }
 
 rc_openpgpjs_crypto.prototype.getPubkeyForAddress = function (address) {
-	var pubkey = this.keyring.publicKeys.getForId(address);
+	var pubkey = this.keyring.publicKeys.getForAddress(address);
 	return pubkey;
 }
 
