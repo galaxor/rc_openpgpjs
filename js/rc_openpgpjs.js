@@ -223,7 +223,7 @@ if(window.rcmail) {
     // TODO Currently only RSA is supported, fix this when OpenPGP.js implements ElGamal & DSA
     var identities = JSON.parse($("#openpgpjs_identities").html());
     var selectedIdent = $("#gen_ident option:selected").val();
-    var keys = rc_openpgpjs_crypto.generateKeys(bits, identities[selectedIdent], $("#gen_passphrase").val()).then(
+    var keys = rc_openpgpjs_crypto.generateKeys(bits, identities[selectedIdent].email, $("#gen_passphrase").val()).then(
     function (result) {
       $("#generated_keys").html("<pre id=\"generated_private\">" + result.privateKeyArmored + "</pre><pre id=\"generated_public\">" + result.publicKeyArmored  +  "</pre>");
       $("#generate_key_error").addClass("hidden");
@@ -388,6 +388,15 @@ if(window.rcmail) {
     var pubkey_sender = fetchSendersPubkey();
     if (pubkey_sender) {
         var lock = rcmail.set_busy(true, 'loading');
+        // XXX Nothing ever sets this to false.
+        // There are various points where we need to prevent the sending of the
+        // message until something is finished.  This is one of those things.
+        // Another is the asynchronous encrypt.
+        // We need to prevent one send and then do rcmail.command('send'...)
+        // again, with various flags in place to show we've done the processing
+        // we need.
+        // In app.js:684, it checks if this.busy, and it won't run the command if busy.
+        // ALSO NOTE, my asynchronous encrypt never SET busy!.
         rcmail.http_post('plugin.pubkey_save', { _pubkey: pubkey_sender.armor() }, lock);
     }
     // end send user's public key to the server
@@ -447,7 +456,6 @@ if(window.rcmail) {
        !$("#openpgpjs_sign").is(":checked")) {
       // Fetch recipient pubkeys
       var pubkeys = fetchRecipientPubkeys();
-      console.log("PK", pubkeys);
       if(pubkeys.length === 0) {
         return false;
       }
@@ -461,20 +469,24 @@ if(window.rcmail) {
           return false;
         }
       }
-      console.log("PKB", pubkeys);
       // end add user's public key
 
       var text = $("textarea#composebody").val();
-      console.log("Plaintext", text);
-      console.log("Pubkeys", pubkeys);
-      rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (evt, encrypted) {
+      rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (plugin, encrypted) {
         console.log("Ciphertext", encrypted.data);
         if(encrypted.data) {
           $("textarea#composebody").val(encrypted.data);
-          evt.finished_treating = 1;
-          return true;
+          plugin.finished_treating = 1;
+          console.log("This", plugin);
+          rcmail.command("send", plugin);
         }
       }).bind(undefined, this));
+
+      // Tell it not to send.  Instead, we will wait until the asynchronous
+      // encryption finishes, and have that callback re-initiate the send
+      // command.  Except this time, we'll set a variable at the plugin scope
+      // that tells us that all our processing has already been done.
+      return false;
     }
 
     // Sign only
