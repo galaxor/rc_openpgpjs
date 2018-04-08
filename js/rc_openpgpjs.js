@@ -223,7 +223,7 @@ if(window.rcmail) {
     // TODO Currently only RSA is supported, fix this when OpenPGP.js implements ElGamal & DSA
     var identities = JSON.parse($("#openpgpjs_identities").html());
     var selectedIdent = $("#gen_ident option:selected").val();
-    var keys = rc_openpgpjs_crypto.generateKeys(bits, identities[selectedIdent].email, $("#gen_passphrase").val()).then(
+    var keys = rc_openpgpjs_crypto.generateKeys(bits, identities[selectedIdent], $("#gen_passphrase").val()).then(
     function (result) {
       $("#generated_keys").html("<pre id=\"generated_private\">" + result.privateKeyArmored + "</pre><pre id=\"generated_public\">" + result.publicKeyArmored  +  "</pre>");
       $("#generate_key_error").addClass("hidden");
