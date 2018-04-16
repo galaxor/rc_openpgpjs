@@ -35,6 +35,8 @@ if(window.rcmail) {
       rcmail.display_message(rcmail.gettext("no_window_crypto", "rc_openpgpjs"), "error");
     }
 
+    this.cleartext = null;
+
     this.send_pubkey_state = "init";
     this.encryption_state = "init";
     this.passphrase_state = "init";
@@ -110,36 +112,7 @@ if(window.rcmail) {
 
       rcmail.env.compose_commands.push("open-key-manager");
       rcmail.addEventListener("beforesend", function(e) {
-        // As much as I'd like to simply let exceptions bubble up and out (I
-        // would like that very much), it is IMPERATIVE!! that we return false
-        // if anything goes wrong.
-        // The "command" function in app.js requires "before" hooks to
-        // affirmatively return false in order to cancel the send.  If they
-        // simply don't return anything, then the command will go through.
-        // See app.js:729 of roundcube 1.3.4.
-        //
-        // If something throws an exception in beforeSend, then it will fail to
-        // return false.
-        // That means that we maybe didn't encrypt a message that the user
-        // intended to encrypt.  If that "send" command goes through, the
-        // plaintext will be sent, when the user intended to send encrypted
-        // text.  This can literally get people killed in real life.
-        // 
-        // XXX I have an idea:  Before attempting to do anything (even before
-        // checking if the "encrypt" box was checked), pull all the text out of
-        // the text area, set it aside in some other variable, and then clear
-        // the text area itself.  That way, if an exception is thrown and the
-        // send accidentally goes through, it just sends a blank message.  If
-        // we do it that way, we don't have to do this try/catch here; we can
-        // allow the exceptions to bubble up and out.  This is desirable
-        // because it makes debugging easier, and even lets the user know that
-        // something went wrong.
-        try {
-          return beforeSend();
-        } catch(e) {
-          console.log(e);
-          return false;
-        }
+        return beforeSend();
       });
     } else if(rcmail.env.action === "show" || rcmail.env.action === "preview") {
       processReceived();
@@ -401,11 +374,59 @@ if(window.rcmail) {
    * Processes messages before sending
    */
   function beforeSend() {
+    // As much as I'd like to simply let exceptions bubble up and out (I
+    // would like that very much), it is IMPERATIVE!! that we return false
+    // if anything goes wrong.
+    // The "command" function in app.js requires "before" hooks to
+    // affirmatively return false in order to cancel the send.  If they
+    // simply don't return anything, then the command will go through.
+    // See app.js:729 of roundcube 1.3.4.
+    //
+    // If something throws an exception in beforeSend, then it will fail to
+    // return false.
+    // That means that we maybe didn't encrypt a message that the user
+    // intended to encrypt.  If that "send" command goes through, the
+    // plaintext will be sent, when the user intended to send encrypted
+    // text.  This can literally get people killed in real life.
+    // 
+    // XXX I have an idea:  Before attempting to do anything (even before
+    // checking if the "encrypt" box was checked), pull all the text out of
+    // the text area, set it aside in some other variable, and then clear
+    // the text area itself.  That way, if an exception is thrown and the
+    // send accidentally goes through, it just sends a blank message.  If
+    // we do it that way, we don't have to do this try/catch here; we can
+    // allow the exceptions to bubble up and out.  This is desirable
+    // because it makes debugging easier, and even lets the user know that
+    // something went wrong.
+
+    // XXX Okay, this idea seems to be working.
+    // HOWEVER, I'm not totally satisfied with this.  It may cause the user to
+    // send a blank message when they intended to send the *encrypted version of*
+    // a blank message, which would not actually be blank.
+    // Instead of blank, I could put some placeholder text in there, but it's
+    // probably best not to try to think of something sufficiently neutral.  If
+    // the placeholder text is actually sent, we will have leaked some
+    // information, such as: the fact that we intended to use encryption; what
+    // software we are using; the fact that an error occurred; the fact that
+    // messages get sent if errors occur.
+    // If we had succeeded in encrypting the message, the eavesdropper would
+    // also know that we intended to use encryption.  But I don't want to
+    // assume that it's ok to leak that info if there's a failure.  If there's
+    // a failure, the most correct way to behave is to not send anything.
+    if (this.cleartext == null) {
+      this.cleartext = $("textarea#composebody").val();
+      $("textarea#composebody").val("");
+    }
+
     if( !$("#openpgpjs_encrypt").is(":checked") &&
         !$("#openpgpjs_sign").is(":checked")) {
 
          if ($("#openpgpjs_warn").val() == "1" ) {
             if(confirm(rcmail.gettext("continue_unencrypted", "rc_openpgpjs"))) {
+                // The user intends to send cleartext.  
+                // It is thus safe to replace the cleartext back into the textarea.
+                $("textarea#composebody").val(this.cleartext);
+
                 // remove the public key attachment since we don't sign nor encrypt the message
                 removePublicKeyAttachment();
                 return true;
@@ -415,6 +436,9 @@ if(window.rcmail) {
          }
          else
          {
+             // The user intends to send cleartext.  
+             // It is thus safe to replace the cleartext back into the textarea.
+             $("textarea#composebody").val(this.cleartext);
              return true
          }
     }
@@ -475,8 +499,7 @@ if(window.rcmail) {
         }
         // end add user's public key
 
-        var text = $("textarea#composebody").val();
-        var encrypted = rc_openpgpjs_crypto.encrypt(pubkeys, text, 1, privkey, passobj.passphrase);
+        var encrypted = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, 1, privkey, passobj.passphrase);
                   
         if(encrypted) {
           $("textarea#composebody").val(encrypted);
@@ -505,9 +528,8 @@ if(window.rcmail) {
         }
         // end add user's public key
 
-        var text = $("textarea#composebody").val();
         var enc_lock = rcmail.set_busy(true, 'encrypting');
-        rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (enc_lock, encrypted) {
+        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext).then((function (enc_lock, encrypted) {
           rcmail.set_busy(false, null, enc_lock);
 
           $("textarea#composebody").val(encrypted.data);
@@ -534,9 +556,8 @@ if(window.rcmail) {
         var passobj = JSON.parse(this.passphrase);
         var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
 
-        var text = $("textarea#composebody").val();
         var enc_lock = rcmail.set_busy(true, 'signing');
-        rc_openpgpjs_crypto.sign(text, privkey, passobj.passphrase).then((function (enc_lock, signed) {
+        rc_openpgpjs_crypto.sign(this.cleartext, privkey, passobj.passphrase).then((function (enc_lock, signed) {
           rcmail.set_busy(false, null, enc_lock);
 
           $("textarea#composebody").val(signed.data);
