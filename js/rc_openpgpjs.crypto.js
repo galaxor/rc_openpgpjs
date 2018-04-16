@@ -36,7 +36,9 @@ function rc_openpgpjs_crypto () {
  * @param text    {String} Message to encrypt
  * @param sign    {Bool}   Sign and encrypt the message?
  * @param privkey {String} Required if sign is True
- * @return {String} Encrypted message
+ * @return {Promise<Object>} encrypted (and optionally signed message) in the form:
+ *                           {data: ASCII armored message}
+
  */
 // TODO: Feed key armored and do openpgp.read_* here
 rc_openpgpjs_crypto.prototype.encrypt = function (pubkeys, text, sign, privkey, passphrase) {
@@ -88,23 +90,24 @@ rc_openpgpjs_crypto.prototype.generateKeys = function (bits, ident, passphrase) 
  * Sign a meesage
  *
  * @param msg             {String} Message to sign
- * @param privkey_armored {String} Armored private key to sign message
+ * @param privkey         {Key}    Private key object to sign message with
  * @param passphrase      {String} Passphrase of private key
- * @return {String} Signed message
+ * @return {Promise<Object>}  signed cleartext in the form:
+ *                            {data: ASCII armored message}
  */
-rc_openpgpjs_crypto.prototype.sign = function (msg, privkey_armored, passphrase) {
-  var priv_key = openpgp.read_privateKey(privkey_armored);
-
-  if(!priv_key[0].decryptSecretMPIs(passphrase)) {
-	alert("WRONG PASS");
-  }
-
+rc_openpgpjs_crypto.prototype.sign = function (msg, privkey, passphrase) {
+  var priv_key;
   try {
-    var signed = openpgp.write_signed_message(priv_key[0], msg);
-	return(signed);
+    priv_key = openpgp.decryptKey(privkey_armored, passphrase);
   } catch(e) {
-    return false;
+    alert(rcmail.gettext("incorrect_pass", "rc_openpgpjs") + e);
   }
+
+  const promise = openpgp.encrypt({
+    data: new String(msg),
+    privateKeys: priv_key[0]
+  });
+  return(promise);
 }
 
 /**

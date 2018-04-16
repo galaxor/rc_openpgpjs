@@ -25,6 +25,10 @@ var VERSTR = "20131021";
 var rc_openpgpjs_crypto = new (require('./rc_openpgpjs.crypto.js'))();
 window.openpgp = require('openpgp');
 
+console.log("Here's what I think about that", 
+      rc_openpgpjs_crypto.getPrivkeyCount,
+      rc_openpgpjs_crypto.getKeyUserids);
+
 if(window.rcmail) {
   rcmail.addEventListener("init", function() {
     if(!window.crypto || !window.crypto.getRandomValues) { // OpenPGP.js specific
@@ -33,6 +37,7 @@ if(window.rcmail) {
 
     this.send_pubkey_state = "init";
     this.encryption_state = "init";
+    this.passphrase_state = "init";
     this.finished_treating = false;
 
     this.passphrase = "";
@@ -105,7 +110,33 @@ if(window.rcmail) {
 
       rcmail.env.compose_commands.push("open-key-manager");
       rcmail.addEventListener("beforesend", function(e) {
-        if(!beforeSend()) {
+        // As much as I'd like to simply let exceptions bubble up and out (I
+        // would like that very much), it is IMPERATIVE!! that we return false
+        // if anything goes wrong.
+        // The "command" function in app.js requires "before" hooks to
+        // affirmatively return false in order to cancel the send.  If they
+        // simply don't return anything, then the command will go through.
+        // See app.js:729 of roundcube 1.3.4.
+        //
+        // If something throws an exception in beforeSend, then it will fail to
+        // return false.
+        // That means that we maybe didn't encrypt a message that the user
+        // intended to encrypt.  If that "send" command goes through, the
+        // plaintext will be sent, when the user intended to send encrypted
+        // text.  This can literally get people killed in real life.
+        // 
+        // XXX I have an idea:  Before attempting to do anything (even before
+        // checking if the "encrypt" box was checked), pull all the text out of
+        // the text area.  That way, if an exception is thrown and the send
+        // accidentally goes through, it just sends a blank message.  If we do
+        // it that way, we don't have to do this try/catch here; we can allow
+        // the exceptions to bubble up and out.  This is desirable because it
+        // makes debugging easier, and even lets the user know that something
+        // went wrong.
+        try {
+          return beforeSend();
+        } catch(e) {
+          console.log(e);
           return false;
         }
       });
@@ -262,6 +293,7 @@ if(window.rcmail) {
 
   /**
    * Set passphrase.
+   * This will be called by the #openpgpjs_key_select dialog.
    *
    * @param i {Integer} Used as openpgp.keyring[private|public]Keys[i]
    * @param p {String}  The passphrase
@@ -294,7 +326,8 @@ if(window.rcmail) {
     // sending an email (when signing a message). These lines makes the client
     // jump right back into beforeSend() allowing key sign and message send to
     // be made as soon as the passphrase is correct and available.
-    if(typeof(this.sendmail) !== "undefined") {
+    if(this.passphrase_state == "pending") {
+      this.passphrase_state = "complete";
       rcmail.command("send", this);
     }
   }
@@ -405,7 +438,7 @@ if(window.rcmail) {
       if($("#openpgpjs_encrypt").is(":checked") && $("#openpgpjs_sign").is(":checked")) {
         // get the private key
         if((typeof this.passphrase == "undefined" || this.passphrase === "") && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
-          this.sendmail = true; // Global var to notify set_passphrase
+          this.passphrase_state = "pending"; // Global var to notify set_passphrase
           $("#openpgpjs_key_select").dialog("open");
           return false;
         }
@@ -472,18 +505,14 @@ if(window.rcmail) {
         // end add user's public key
 
         var text = $("textarea#composebody").val();
-        var enclock = rcmail.set_busy(true, 'encrypting');
-        rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (enclock, encrypted) {
-          rcmail.set_busy(false, null, enclock);
+        var enc_lock = rcmail.set_busy(true, 'encrypting');
+        rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (enc_lock, encrypted) {
+          rcmail.set_busy(false, null, enc_lock);
 
           $("textarea#composebody").val(encrypted.data);
           this.encryption_state = "complete";
           rcmail.command("send", this);
-        }).bind(this, enclock));
-
-        // Tell it not to send unless we've accomplished all our asynchronous tasks.
-        // Each asynchronous task will jump back to the beginning and try again.
-        return this.send_pubkey_state == "complete" && this.encryption_state == "complete";
+        }).bind(this, enc_lock));
       }
 
       // Sign only
@@ -491,7 +520,7 @@ if(window.rcmail) {
          !$("#openpgpjs_encrypt").is(":checked")) {
 
         if((typeof this.passphrase == "undefined" || this.passphrase === "") && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
-          this.sendmail = true; // Global var to notify set_passphrase
+          this.passphrase_state = "pending"; // Global var to notify set_passphrase
           $("#openpgpjs_key_select").dialog("open");
           return false;
         }
@@ -504,23 +533,24 @@ if(window.rcmail) {
         var passobj = JSON.parse(this.passphrase);
         var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
 
-        if(!privkey[0].decryptSecretMPIs(passobj.passphrase)) {
-          alert(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
-        }
+        var text = $("textarea#composebody").val();
+        var enc_lock = rcmail.set_busy(true, 'signing');
+        rc_openpgpjs_crypto.sign(text, privkey, passobj.passphrase).then((function (enc_lock, signed) {
+          rcmail.set_busy(false, null, enc_lock);
 
-        var privkey_armored = rc_openpgpjs_crypto.getPrivkeyArmored(passobj.id);
-        signed = rc_openpgpjs_crypto.sign($("textarea#composebody").val(), privkey_armored, passobj.passphrase);
-
-        if(signed) {
-          $("textarea#composebody").val(signed);
-          return true;
-        }
-
-        return false;
+          $("textarea#composebody").val(signed.data);
+          this.encryption_state = "complete";
+          console.log("Signing complete; going around again");
+          rcmail.command("send", this);
+        }).bind(this, enc_lock));
       }
     }
 
-    return false;
+    // Tell it not to send unless we've accomplished all our asynchronous tasks.
+    // Each asynchronous task will jump back to the beginning and try again.
+    var finished_treating = (this.send_pubkey_state == "complete" && this.encryption_state == "complete");
+    console.log("Finished treating?", finished_treating);
+    return this.send_pubkey_state == "complete" && this.encryption_state == "complete";
   }
 
   /**
