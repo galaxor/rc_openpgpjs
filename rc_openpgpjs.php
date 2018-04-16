@@ -360,6 +360,7 @@ class rc_openpgpjs extends rcube_plugin {
       $pubkey = trim(get_input_value('_pubkey', RCUBE_INPUT_POST));
       file_put_contents($file, $pubkey);
     }
+    $rcmail->output->command("plugin.pubkey_save_callback", $_REQUEST['_unlock'], $file);
   }
 
   /**
