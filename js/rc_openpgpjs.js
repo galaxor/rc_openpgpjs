@@ -127,12 +127,13 @@ if(window.rcmail) {
         // 
         // XXX I have an idea:  Before attempting to do anything (even before
         // checking if the "encrypt" box was checked), pull all the text out of
-        // the text area.  That way, if an exception is thrown and the send
-        // accidentally goes through, it just sends a blank message.  If we do
-        // it that way, we don't have to do this try/catch here; we can allow
-        // the exceptions to bubble up and out.  This is desirable because it
-        // makes debugging easier, and even lets the user know that something
-        // went wrong.
+        // the text area, set it aside in some other variable, and then clear
+        // the text area itself.  That way, if an exception is thrown and the
+        // send accidentally goes through, it just sends a blank message.  If
+        // we do it that way, we don't have to do this try/catch here; we can
+        // allow the exceptions to bubble up and out.  This is desirable
+        // because it makes debugging easier, and even lets the user know that
+        // something went wrong.
         try {
           return beforeSend();
         } catch(e) {
