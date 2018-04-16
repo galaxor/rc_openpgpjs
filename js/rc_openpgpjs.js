@@ -472,15 +472,14 @@ if(window.rcmail) {
         // end add user's public key
 
         var text = $("textarea#composebody").val();
-        rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (encrypted) {
-          if(encrypted.data) {
-            window.setTimeout(function () {
-              $("textarea#composebody").val(encrypted.data);
-              this.encryption_state = "complete";
-              rcmail.command("send", this);
-            }, 2000);
-          }
-        }).bind(this));
+        var enclock = rcmail.set_busy(true, 'encrypting');
+        rc_openpgpjs_crypto.encrypt(pubkeys, text).then((function (enclock, encrypted) {
+          rcmail.set_busy(false, null, enclock);
+
+          $("textarea#composebody").val(encrypted.data);
+          this.encryption_state = "complete";
+          rcmail.command("send", this);
+        }).bind(this, enclock));
 
         // Tell it not to send unless we've accomplished all our asynchronous tasks.
         // Each asynchronous task will jump back to the beginning and try again.
