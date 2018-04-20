@@ -698,7 +698,7 @@ if(window.rcmail) {
     return true;
   }
 
-  function pubkey_save_callback(unlock, file) {
+  function pubkey_save_callback({unlock: unlock, file: file}) {
     rcmail.set_busy(false, null, unlock);
     // Try again to send the mail, which previously failed because we were busy saving the pubkey.
     // XXX We probably have to do something in order to actually attach the
