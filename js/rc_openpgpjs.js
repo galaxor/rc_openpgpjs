@@ -25,10 +25,6 @@ var VERSTR = "20131021";
 var rc_openpgpjs_crypto = new (require('./rc_openpgpjs.crypto.js'))();
 window.openpgp = require('openpgp');
 
-console.log("Here's what I think about that", 
-      rc_openpgpjs_crypto.getPrivkeyCount,
-      rc_openpgpjs_crypto.getKeyUserids);
-
 if(window.rcmail) {
   rcmail.addEventListener("init", function() {
     if(!window.crypto || !window.crypto.getRandomValues) { // OpenPGP.js specific
@@ -41,6 +37,8 @@ if(window.rcmail) {
     this.encryption_state = "init";
     this.passphrase_state = "init";
     this.finished_treating = false;
+
+    this.getting_passphrase_lock = null;
 
     this.passphrase = "";
     rcmail.addEventListener("plugin.pks_search", pks_search_callback);
@@ -59,8 +57,21 @@ if(window.rcmail) {
         updateKeySelector();
       },
       close: function() {
-        $("#selected_key_passphrase").val("");
-        $("#openpgpjs_rememberpass").attr("checked", false);
+        rcmail.set_busy(false, null, window.getting_passphrase_lock);
+
+        if (passphrase_state == "pending") {
+          // If they X'ed out of the window instead of choosing a key, reset
+          // everything; we're not sending.
+          window.passphrase_state = "init";
+          window.encryption_state = "init";
+          // Don't mess with send_pubkey_state.  If we already attached the
+          // pubkey, leave it attached.  If it's still in process, let it
+          // continue.
+          $("textarea#composebody").val(window.cleartext);
+        } else {
+          $("#selected_key_passphrase").val("");
+          $("#openpgpjs_rememberpass").attr("checked", false);
+        }
       },
     });
 	
@@ -123,7 +134,19 @@ if(window.rcmail) {
    * Processes received messages
    */
   function processReceived() {
-    var msg = rc_openpgpjs_crypto.parseMsg($("#messagebody div.message-part pre").html());
+    var msgbody = $("#messagebody div.message-part pre");
+
+    // This function is called by set_passphrase, but there are situations
+    // where set_passphrase is called where we are not trying to read a
+    // message.  Namely, when we are trying to sign a message, we also need to
+    // decrypt the private key, even though there is no message we're trying to
+    // decrypt.
+    // If we find that there is no messagebody on the screen, just quit.
+    if (msgbody.length == 0) {
+      return;
+    }
+
+    var msg = rc_openpgpjs_crypto.parseMsg(msgbody.html());
 
     // OpenPGP failed parsing the message, no action required.
     if(!msg) {
@@ -171,7 +194,7 @@ if(window.rcmail) {
     }
 
     // json string from set_passphrase, obj.id = privkey id, obj.passphrase = privkey passphrase
-    var passobj = JSON.parse(this.passphrase);
+    var passobj = this.passphrase;
     var privkey_armored = rc_openpgpjs_crypto.getPrivkeyArmored(passobj.id);
 
     decrypted = rc_openpgpjs_crypto.decrypt(msg, privkey_armored, passobj.passphrase);
@@ -269,7 +292,7 @@ if(window.rcmail) {
    * Set passphrase.
    * This will be called by the #openpgpjs_key_select dialog.
    *
-   * @param i {Integer} Used as openpgp.keyring[private|public]Keys[i]
+   * @param i {Integer} Used as this.keyring.[private|public]Keys.keys[i]
    * @param p {String}  The passphrase
    */
   // TODO: move passphrase checks from old decrypt() to here
@@ -280,13 +303,15 @@ if(window.rcmail) {
       return false;
     }
 
-    if(!rc_openpgpjs_crypto.decryptSecretMPIs(i, p)) {
+    var decryptedKey = rc_openpgpjs_crypto.decryptSecretKey(i, p);
+    console.log("Here's how it went down: ", decryptedKey);
+    if(!decryptedKey) {
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
       return false;
     }
 
-    this.passphrase = JSON.stringify({ "id" : i, "passphrase" : p } );
+    this.passphrase = { "id" : i, "passphrase" : p };
     processReceived();
 
     if($("#openpgpjs_rememberpass").is(":checked")) {
@@ -294,17 +319,34 @@ if(window.rcmail) {
     }
 
     $("#key_select_error").addClass("hidden");
+    if (this.passphrase_state == "pending") {
+      // There's a state between pending and complete, because we need to close
+      // the dialog.  If the dialog is closed by Xing out of it, it should go
+      // pending->init.  But if the dialog closed because we selected
+      // something, then the dialog closing should not set it back to the init
+      // state.  So, we set the state to "selected", so that the dialog knows
+      // to leave it be.  Then, after the dialog is closed, we can set it to
+      // the "complete" state.
+      // We shouldn't set it to the "complete" state here, because lots of
+      // things cause the flow to return to the top of the beforeSend handler.
+      // So, the "selected" state is like "this was completed on this
+      // iteration", whereas the "complete" state is "this was completed on a
+      // previous iteration, so we don't have to go back to the top of
+      // beforeSend".
+      this.passphrase_state = "selected";
+    }
     $("#openpgpjs_key_select").dialog("close");
 
     // This is required when sending emails and private keys are required for
     // sending an email (when signing a message). These lines makes the client
     // jump right back into beforeSend() allowing key sign and message send to
     // be made as soon as the passphrase is correct and available.
-    if(this.passphrase_state == "pending") {
+    if(this.passphrase_state == "selected") {
       this.passphrase_state = "complete";
       rcmail.command("send", this);
     }
   }
+  window.set_passphrase = set_passphrase;
 
   function fetchRecipientPubkeys() {
     var pubkeys = new Array();
@@ -456,105 +498,115 @@ if(window.rcmail) {
     }
     // end send user's public key to the server
 
-    if (this.encryption_state == "init") {
+    // Encrypt and sign
+    if($("#openpgpjs_encrypt").is(":checked") && $("#openpgpjs_sign").is(":checked")) {
+      // get the private key
+      if((typeof this.passphrase == "undefined" || this.passphrase === "") && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
+        this.passphrase_state = "pending"; // Global var to notify set_passphrase
+        $("#openpgpjs_key_select").dialog("open");
+        return false;
+      }
+
+      if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
+        alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
+        return false;
+      }
+
+      var passobj = this.passphrase;
+      var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
+
+      if(!privkey[0].decryptSecretMPIs(passobj.passphrase)) {
+        alert(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
+      }
+      // we now have the private key (for signing)
+      
+      // get the public key
+      var pubkeys = fetchRecipientPubkeys();
+      if(pubkeys.length === 0) {
+        return false;
+      }
+      // done public keys
+
+      // add the user's public key
+      var pubkey_sender = fetchSendersPubkey();
+      if (pubkey_sender) {
+        pubkeys.push(pubkey_sender);
+      } else {
+        if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
+          return false;
+        }
+      }
+      // end add user's public key
+
+      var encrypted = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, 1, privkey, passobj.passphrase);
+                
+      if(encrypted) {
+        $("textarea#composebody").val(encrypted);
+        this.finished_treating = true;
+        return true;
+      }
+    }
+
+    console.log("states", 
+    this.send_pubkey_state,
+    this.encryption_state,
+    this.passphrase_state);
+        
+    // Encrypt only
+    if($("#openpgpjs_encrypt").is(":checked")
+       && !$("#openpgpjs_sign").is(":checked")
+       && this.encryption_state == "init")
+    {
       this.encryption_state = "pending";
-
-      // Encrypt and sign
-      if($("#openpgpjs_encrypt").is(":checked") && $("#openpgpjs_sign").is(":checked")) {
-        // get the private key
-        if((typeof this.passphrase == "undefined" || this.passphrase === "") && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
-          this.passphrase_state = "pending"; // Global var to notify set_passphrase
-          $("#openpgpjs_key_select").dialog("open");
+      // Fetch recipient pubkeys
+      var pubkeys = fetchRecipientPubkeys();
+      if(pubkeys.length === 0) {
+        return false;
+      }
+      
+      // add the user's public key
+      var pubkey_sender = fetchSendersPubkey();
+      if (pubkey_sender) {
+        pubkeys.push(pubkey_sender);
+      } else {
+        if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
           return false;
-        }
-
-        if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
-          alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
-          return false;
-        }
-
-        var passobj = JSON.parse(this.passphrase);
-        var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
-
-        if(!privkey[0].decryptSecretMPIs(passobj.passphrase)) {
-          alert(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
-        }
-        // we now have the private key (for signing)
-        
-        // get the public key
-        var pubkeys = fetchRecipientPubkeys();
-        if(pubkeys.length === 0) {
-          return false;
-        }
-        // done public keys
-
-        // add the user's public key
-        var pubkey_sender = fetchSendersPubkey();
-        if (pubkey_sender) {
-          pubkeys.push(pubkey_sender);
-        } else {
-          if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
-            return false;
-          }
-        }
-        // end add user's public key
-
-        var encrypted = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, 1, privkey, passobj.passphrase);
-                  
-        if(encrypted) {
-          $("textarea#composebody").val(encrypted);
-          this.finished_treating = true;
-          return true;
         }
       }
-          
-      // Encrypt only
-      if($("#openpgpjs_encrypt").is(":checked") &&
-         !$("#openpgpjs_sign").is(":checked")) {
-        // Fetch recipient pubkeys
-        var pubkeys = fetchRecipientPubkeys();
-        if(pubkeys.length === 0) {
-          return false;
-        }
-        
-        // add the user's public key
-        var pubkey_sender = fetchSendersPubkey();
-        if (pubkey_sender) {
-          pubkeys.push(pubkey_sender);
-        } else {
-          if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
-            return false;
-          }
-        }
-        // end add user's public key
+      // end add user's public key
 
-        var enc_lock = rcmail.set_busy(true, 'encrypting');
-        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext).then((function (enc_lock, encrypted) {
-          rcmail.set_busy(false, null, enc_lock);
+      var enc_lock = rcmail.set_busy(true, 'encrypting');
+      rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext).then((function (enc_lock, encrypted) {
+        rcmail.set_busy(false, null, enc_lock);
 
-          $("textarea#composebody").val(encrypted.data);
-          this.encryption_state = "complete";
-          rcmail.command("send", this);
-        }).bind(this, enc_lock));
+        $("textarea#composebody").val(encrypted.data);
+        this.encryption_state = "complete";
+        rcmail.command("send", this);
+      }).bind(this, enc_lock));
+    }
+
+    // Sign only
+    if($("#openpgpjs_sign").is(":checked") &&
+       !$("#openpgpjs_encrypt").is(":checked")) {
+
+      if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
+        alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
+        return false;
       }
 
-      // Sign only
-      if($("#openpgpjs_sign").is(":checked") &&
-         !$("#openpgpjs_encrypt").is(":checked")) {
+      if(this.passphrase_state == "init" && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
+        this.passphrase_state = "pending"; // Global var to notify set_passphrase
+        this.getting_passphrase_lock = rcmail.set_busy(true, 'getting_passphrase');
+        $("#openpgpjs_key_select").dialog("open");
+        return false;
+      }
 
-        if((typeof this.passphrase == "undefined" || this.passphrase === "") && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
-          this.passphrase_state = "pending"; // Global var to notify set_passphrase
-          $("#openpgpjs_key_select").dialog("open");
-          return false;
-        }
+      if (this.passphrase_state == "complete" && this.encryption_state == "init") {
+        this.encryption_state = "pending";
 
-        if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
-          alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
-          return false;
-        }
-
-        var passobj = JSON.parse(this.passphrase);
+        var passobj = this.passphrase;
         var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
+        console.log("The privkey", privkey);
 
         var enc_lock = rcmail.set_busy(true, 'signing');
         rc_openpgpjs_crypto.sign(this.cleartext, privkey, passobj.passphrase).then((function (enc_lock, signed) {
@@ -759,6 +811,7 @@ if(window.rcmail) {
     $("#openpgpjs_selected_id").val(i);
     $("#passphrase").val("");
   }
+  window.select_key = select_key;
 
   /**
    * Update key selector dialog.
@@ -773,10 +826,12 @@ if(window.rcmail) {
     } else {
       // Selected set as $("#openpgpjs_selected_id").val(), then get that value from set_passphrase
       for (var i = 0; i < rc_openpgpjs_crypto.getPrivkeyCount(); i++) {
-        for (var j = 0; j < rc_openpgpjs_crypto.getKeyUserids(i, true).length; j++) {
+        var persons = rc_openpgpjs_crypto.getPersons(i, true);
+        for (var j = 0; j < persons.length; j++) {
           fingerprint = rc_openpgpjs_crypto.getFingerprint(i, true, false);
-          person = escapeHtml(rc_openpgpjs_crypto.getPerson(i, j, true));
-          $("#openpgpjs_key_select_list").append("<div class=\"clickme\" id=\"" + fingerprint +"\"onclick=\"select_key(" + i + ");\">" + fingerprint + " " + person + "</div>");
+          person = persons[j];
+          $("#openpgpjs_key_select_list").append("<div class=\"clickme\" id=\"" + fingerprint +"\" onclick=\"select_key(" + i + ");\"></div>");
+          $("#openpgpjs_key_select_list #"+fingerprint).text(fingerprint+" "+person);
         }
       }
 

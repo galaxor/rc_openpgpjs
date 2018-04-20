@@ -96,18 +96,12 @@ rc_openpgpjs_crypto.prototype.generateKeys = function (bits, ident, passphrase) 
  *                            {data: ASCII armored message}
  */
 rc_openpgpjs_crypto.prototype.sign = function (msg, privkey, passphrase) {
-  var priv_key;
-  try {
-    priv_key = openpgp.decryptKey(privkey_armored, passphrase);
-  } catch(e) {
-    alert(rcmail.gettext("incorrect_pass", "rc_openpgpjs") + e);
-  }
-
-  const promise = openpgp.encrypt({
-    data: new String(msg),
-    privateKeys: priv_key[0]
+  return openpgp.decryptKey({privateKey: privkey, passphrase: passphrase}).then(function (priv_key) {
+    return openpgp.sign({
+      data: new String(msg),
+      privateKeys: [priv_key]
+    });
   });
-  return(promise);
 }
 
 /**
@@ -277,14 +271,13 @@ rc_openpgpjs_crypto.prototype.getFingerprintForSender = function (sender) {
 }
 
 rc_openpgpjs_crypto.prototype.getPrivkeyArmored = function (id) {
-	var keyid = this.keyring.privateKeys[id].getKeyId();
-	var privkey_armored = this.keyring.privateKeys.getForId(keyid)[0].key.armored;
-	return privkey_armored;
+	var privkey = getPrivkeyObj(id);
+    return privkey.armor();
 }
 
 rc_openpgpjs_crypto.prototype.getPrivkeyObj = function (id) {
-	var privkey_armored = getPrivkeyArmored(id);
-    return privkey = openpgp.read_privateKey(privkey_armored);
+	var privkey = this.keyring.privateKeys.keys[id];
+	return privkey;
 }
 
 // Gets privkey obj from armored
@@ -293,8 +286,13 @@ rc_openpgpjs_crypto.prototype.getPrivkey = function (armored) {
 	return privkey;
 }
 
-rc_openpgpjs_crypto.prototype.decryptSecretMPIs = function (i, p) {
-	return this.keyring.privateKeys[i].decryptSecretMPIs(p);
+rc_openpgpjs_crypto.prototype.decryptSecretKey = function (i, p) {
+  try {
+    return openpgp.decryptKey(this.keyring.privateKeys.keys[i], p);
+  } catch(e) {
+    console.log(e);
+    return false;
+  }
 }
 
 rc_openpgpjs_crypto.prototype.decryptSecretMPIsForId = function (id, passphrase) {
@@ -345,6 +343,7 @@ rc_openpgpjs_crypto.prototype.removeKey = function (i, getPrivate) {
 	}
 
         var key_id = this.getKeyID(i, getPrivate, true);
+        console.log("RMV", key_id);
 
         var ret;
 	if (getPrivate) {
