@@ -32,17 +32,19 @@ if(window.rcmail) {
     }
 
     this.cleartext = null;
+    this.ciphertext = null;
 
-    this.send_pubkey_state = "init";
-    this.encryption_state = "init";
-    this.passphrase_state = "init";
+    // If we decide to encrypt or sign, we'll have to do it asynchronously.
+    // Therefore, beforeSend will cancel the send and do its business.
+    // When its business is done, it will trigger the send again.
+    // We'll have to know that the business is done, so that we don't try to do
+    // it again.  That's what this variable is for.
     this.finished_treating = false;
 
     this.getting_passphrase_lock = null;
 
     this.passphrase = "";
     rcmail.addEventListener("plugin.pks_search", pks_search_callback);
-    rcmail.addEventListener("plugin.pubkey_save_callback", pubkey_save_callback);
 
     if(sessionStorage.length > 0) {
       this.passphrase = sessionStorage[0];
@@ -413,6 +415,35 @@ if(window.rcmail) {
   }
 
   /**
+   * send the user's public key to the server so it can be sent as attachment
+   * @return {Promise<String>} The filename of the attachment on the server.  
+   *                           The filename will be null if the user has no pubkey.
+   */
+  function sendPubkey() {
+    var pubkey_save_callback_fn;
+    var pubkey_save_promise;
+    
+    var pubkey_sender = fetchSendersPubkey();
+    if (pubkey_sender) {
+      // Create a Promise which will only be resolved when the rcmail.http_post completes.
+      // We can then do pubkey_save_callback_promise.then() to wait for the http_post to complete.
+      pubkey_save_promise = new Promise(function (resolve, reject) {
+        pubkey_save_callback_fn = pubkey_save_callback.bind(this, resolve);
+        rcmail.addEventListener("plugin.pubkey_save_callback", pubkey_save_callback_fn);
+      });
+
+      var lock = rcmail.set_busy(true, 'loading');
+      rcmail.http_post('plugin.pubkey_save', { _pubkey: pubkey_sender.armor() }, lock);
+    } else {
+      // We are not sending the user's pubkey to the server because the user has no pubkey.
+      pubkey_save_promise = Promise.resolve(null);
+    }
+
+    return pubkey_save_promise;
+  }
+
+
+  /**
    * Processes messages before sending
    */
   function beforeSend() {
@@ -460,6 +491,15 @@ if(window.rcmail) {
       $("textarea#composebody").val("");
     }
 
+    // If we're finished with everything, and the ciphertext is computed, put
+    // it back in there and allow the send to go through.
+    console.log("FINished treating???", this.finished_treating);
+    if (this.finished_treating) {
+      $("textarea#composebody").val(this.ciphertext);
+      return true;
+    }
+
+
     if( !$("#openpgpjs_encrypt").is(":checked") &&
         !$("#openpgpjs_sign").is(":checked")) {
 
@@ -485,18 +525,25 @@ if(window.rcmail) {
          }
     }
 
-    if(this.send_pubkey_state == "complete" && this.encryption_state == "complete") {
-      return true;
-    }
+    // This will be a Promise to send the pubkey to the server.
+    // We will set this when we've decided to actually encrypt/sign the message.
+    // We may decide not to send the message if, for example, the recipient has
+    // no public key, we have no private key, or we can't decrypt the private
+    // key.
+    // Note that sendPubkey may return null if it declines to save the pubkey.
+    // We will set this to null here so that if we decline to attempt to save
+    // the pubkey, we'll get the same result: null.
+    var pubkey_save_promise = null;
 
-    // send the user's public key to the server so it can be sent as attachment
-    var pubkey_sender = fetchSendersPubkey();
-    if (pubkey_sender && this.send_pubkey_state == "init") {
-      var lock = rcmail.set_busy(true, 'loading');
-      this.send_pubkey_state = "pending";
-      rcmail.http_post('plugin.pubkey_save', { _pubkey: pubkey_sender.armor() }, lock);
-    }
-    // end send user's public key to the server
+    // This will be a Promise to encrypt (and/or sign) the message.
+    // We will set it when we know which operations we are actually doing (enc/sign).
+    var enc_sign_promise;
+
+    // This is a roundcube "lock".  We will set it when we set_busy to start encryption/signing.
+    // We don't set it now because if we are signing, then we'll have to get a
+    // password to unlock the private key.  Maybe the user cancels at that
+    // point.
+    var enc_lock;
 
     // Encrypt and sign
     if($("#openpgpjs_encrypt").is(":checked") && $("#openpgpjs_sign").is(":checked")) {
@@ -547,20 +594,14 @@ if(window.rcmail) {
       }
     }
 
-    console.log("states", 
-    this.send_pubkey_state,
-    this.encryption_state,
-    this.passphrase_state);
-        
     // Encrypt only
     if($("#openpgpjs_encrypt").is(":checked")
-       && !$("#openpgpjs_sign").is(":checked")
-       && this.encryption_state == "init")
+       && !$("#openpgpjs_sign").is(":checked"))
     {
-      this.encryption_state = "pending";
       // Fetch recipient pubkeys
       var pubkeys = fetchRecipientPubkeys();
       if(pubkeys.length === 0) {
+        // XXX We should notify the user that we've given up!
         return false;
       }
       
@@ -575,14 +616,10 @@ if(window.rcmail) {
       }
       // end add user's public key
 
-      var enc_lock = rcmail.set_busy(true, 'encrypting');
-      rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext).then((function (enc_lock, encrypted) {
-        rcmail.set_busy(false, null, enc_lock);
-
-        $("textarea#composebody").val(encrypted.data);
-        this.encryption_state = "complete";
-        rcmail.command("send", this);
-      }).bind(this, enc_lock));
+      pubkey_save_promise = sendPubkey();
+      
+      enc_lock = rcmail.set_busy(true, 'encrypting');
+      enc_sign_promise = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext);
     }
 
     // Sign only
@@ -620,11 +657,25 @@ if(window.rcmail) {
       }
     }
 
-    // Tell it not to send unless we've accomplished all our asynchronous tasks.
-    // Each asynchronous task will jump back to the beginning and try again.
-    var finished_treating = (this.send_pubkey_state == "complete" && this.encryption_state == "complete");
-    console.log("Finished treating?", finished_treating);
-    return this.send_pubkey_state == "complete" && this.encryption_state == "complete";
+    // Wait for all the operations to complete.
+    console.log("PSP", pubkey_save_promise);
+    console.log("ESP", enc_sign_promise);
+    Promise.all([pubkey_save_promise, enc_sign_promise]).then(function ([pubkey_filename, encrypted]) {
+      console.log("Done:", pubkey_filename, encrypted);
+      console.log("enc0", encrypted);
+
+      rcmail.set_busy(false, null, enc_lock);
+      console.log("enc1", encrypted);
+      this.ciphertext = encrypted.data;
+      console.log("enc2", encrypted);
+
+      // set a global var and call command send again
+      this.finished_treating = true;
+      rcmail.command("send", this);
+    });
+
+    // Block the send until our encryption tasks are done.
+    return false;
   }
 
   /**
@@ -698,7 +749,7 @@ if(window.rcmail) {
     return true;
   }
 
-  function pubkey_save_callback({unlock: unlock, file: file}) {
+  function pubkey_save_callback(resolve_fn, {unlock: unlock, file: file}) {
     rcmail.set_busy(false, null, unlock);
     // Try again to send the mail, which previously failed because we were busy saving the pubkey.
     // XXX We probably have to do something in order to actually attach the
@@ -706,7 +757,7 @@ if(window.rcmail) {
     // server.
     console.log("The pubkey was saved as ", file, this);
     this.send_pubkey_state = "complete";
-    rcmail.command("send", this);
+    resolve_fn(file);
   }
 
   function pks_search_callback(response) {
