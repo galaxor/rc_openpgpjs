@@ -46,6 +46,15 @@ if(window.rcmail) {
     this.passphrase = "";
     rcmail.addEventListener("plugin.pks_search", pks_search_callback);
 
+    // The sendPubkey function creates a Promise that should get resolved when
+    // the server returns and this callback gets called.
+    // Therefore, when we create the Promise, we will set
+    // this.pubkey_save_resolve to be the resolve function.  When
+    // pubkey_save_callback gets called, it will resolve the Promise by calling
+    // this.pubkey_save_resolve.
+    this.pubkey_save_resolve = null;
+    rcmail.addEventListener("plugin.pubkey_save_callback", pubkey_save_callback);
+
     if(sessionStorage.length > 0) {
       this.passphrase = sessionStorage[0];
     }
@@ -416,11 +425,10 @@ if(window.rcmail) {
 
   /**
    * send the user's public key to the server so it can be sent as attachment
-   * @return {Promise<String>} The filename of the attachment on the server.  
-   *                           The filename will be null if the user has no pubkey.
+   * @return Promise<String> The filename of the attachment on the server.  
+   *                         The filename will be null if the user has no pubkey.
    */
   function sendPubkey() {
-    var pubkey_save_callback_fn;
     var pubkey_save_promise;
     
     var pubkey_sender = fetchSendersPubkey();
@@ -428,8 +436,7 @@ if(window.rcmail) {
       // Create a Promise which will only be resolved when the rcmail.http_post completes.
       // We can then do pubkey_save_callback_promise.then() to wait for the http_post to complete.
       pubkey_save_promise = new Promise(function (resolve, reject) {
-        pubkey_save_callback_fn = pubkey_save_callback.bind(this, resolve);
-        rcmail.addEventListener("plugin.pubkey_save_callback", pubkey_save_callback_fn);
+        this.pubkey_save_resolve = resolve;
       });
 
       var lock = rcmail.set_busy(true, 'loading');
@@ -462,7 +469,7 @@ if(window.rcmail) {
     // plaintext will be sent, when the user intended to send encrypted
     // text.  This can literally get people killed in real life.
     // 
-    // XXX I have an idea:  Before attempting to do anything (even before
+    // I have an idea:  Before attempting to do anything (even before
     // checking if the "encrypt" box was checked), pull all the text out of
     // the text area, set it aside in some other variable, and then clear
     // the text area itself.  That way, if an exception is thrown and the
@@ -472,7 +479,7 @@ if(window.rcmail) {
     // because it makes debugging easier, and even lets the user know that
     // something went wrong.
 
-    // XXX Okay, this idea seems to be working.
+    // This idea seems to be working.
     // HOWEVER, I'm not totally satisfied with this.  It may cause the user to
     // send a blank message when they intended to send the *encrypted version of*
     // a blank message, which would not actually be blank.
@@ -661,13 +668,8 @@ if(window.rcmail) {
     console.log("PSP", pubkey_save_promise);
     console.log("ESP", enc_sign_promise);
     Promise.all([pubkey_save_promise, enc_sign_promise]).then(function ([pubkey_filename, encrypted]) {
-      console.log("Done:", pubkey_filename, encrypted);
-      console.log("enc0", encrypted);
-
       rcmail.set_busy(false, null, enc_lock);
-      console.log("enc1", encrypted);
       this.ciphertext = encrypted.data;
-      console.log("enc2", encrypted);
 
       // set a global var and call command send again
       this.finished_treating = true;
@@ -749,15 +751,16 @@ if(window.rcmail) {
     return true;
   }
 
-  function pubkey_save_callback(resolve_fn, {unlock: unlock, file: file}) {
+  function pubkey_save_callback({unlock: unlock, file: file}) {
     rcmail.set_busy(false, null, unlock);
-    // Try again to send the mail, which previously failed because we were busy saving the pubkey.
+    // The beforeSend function is waiting for a Promise to be resolved.  That
+    // Promise can be resolved by calling this.pubkey_save_resolve.
+
     // XXX We probably have to do something in order to actually attach the
     // pubkey; so far, we've just transmitted the data into a tempfile on the
     // server.
-    console.log("The pubkey was saved as ", file, this);
-    this.send_pubkey_state = "complete";
-    resolve_fn(file);
+    this.pubkey_save_resolve(file);
+    this.pubkey_save_resolve = null;
   }
 
   function pks_search_callback(response) {
