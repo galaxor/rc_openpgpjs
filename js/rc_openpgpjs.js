@@ -41,9 +41,6 @@ if(window.rcmail) {
     // it again.  That's what this variable is for.
     this.finished_treating = false;
 
-    this.getting_passphrase_lock = null;
-
-    this.passphrase = "";
     rcmail.addEventListener("plugin.pks_search", pks_search_callback);
 
     // The sendPubkey function creates a Promise that should get resolved when
@@ -59,6 +56,18 @@ if(window.rcmail) {
       this.passphrase = sessionStorage[0];
     }
 
+    // This dialog contains a form which calls the set_passphrase function onsubmit.
+    // It is set_passphrase's responsibility to close the dialog if the user
+    // successfully chose a key and entered a passphrase.  But the user can
+    // also click the X to close the dialog, in which case the close function
+    // will be called, but no key is chosen and no passphrase is entered.
+
+    // Wherever we are opening the dialog from, a Promise was created at that point.
+    // We will want the set_passphrase function, or the close function here, to
+    // be able to resolve that promise.  So the resolve and reject functions
+    // are placed in this global variable.
+    this.key_select_resolve_reject = null;
+
     $("#openpgpjs_key_select").dialog({
       modal: true,
       autoOpen: false,
@@ -68,21 +77,8 @@ if(window.rcmail) {
         updateKeySelector();
       },
       close: function() {
-        rcmail.set_busy(false, null, window.getting_passphrase_lock);
-
-        if (passphrase_state == "pending") {
-          // If they X'ed out of the window instead of choosing a key, reset
-          // everything; we're not sending.
-          window.passphrase_state = "init";
-          window.encryption_state = "init";
-          // Don't mess with send_pubkey_state.  If we already attached the
-          // pubkey, leave it attached.  If it's still in process, let it
-          // continue.
-          $("textarea#composebody").val(window.cleartext);
-        } else {
-          $("#selected_key_passphrase").val("");
-          $("#openpgpjs_rememberpass").attr("checked", false);
-        }
+        $("#selected_key_passphrase").val("");
+        $("#openpgpjs_rememberpass").attr("checked", false);
       },
     });
 	
@@ -311,7 +307,7 @@ if(window.rcmail) {
     if(i === "-1") {
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").html(rcmail.gettext("select_key", "rc_openpgpjs"));
-      return false;
+      this.key_select_resolve_reject.reject();
     }
 
     var decryptedKey = rc_openpgpjs_crypto.decryptSecretKey(i, p);
@@ -319,10 +315,16 @@ if(window.rcmail) {
     if(!decryptedKey) {
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
-      return false;
+      this.key_select_resolve_reject.reject();
     }
 
-    this.passphrase = { "id" : i, "passphrase" : p };
+    var selected_key = { "id" : i, "passphrase" : p };
+
+    // We may have been entering a passphrase because we were attempting to
+    // read an encrypted message, and we needed the private key in order to do
+    // that.  In that case, we will want to process the message now.
+    // XXX I have not examined this flow yet.  It probably doesn't work, and it
+    // will probably change.
     processReceived();
 
     if($("#openpgpjs_rememberpass").is(":checked")) {
@@ -330,32 +332,9 @@ if(window.rcmail) {
     }
 
     $("#key_select_error").addClass("hidden");
-    if (this.passphrase_state == "pending") {
-      // There's a state between pending and complete, because we need to close
-      // the dialog.  If the dialog is closed by Xing out of it, it should go
-      // pending->init.  But if the dialog closed because we selected
-      // something, then the dialog closing should not set it back to the init
-      // state.  So, we set the state to "selected", so that the dialog knows
-      // to leave it be.  Then, after the dialog is closed, we can set it to
-      // the "complete" state.
-      // We shouldn't set it to the "complete" state here, because lots of
-      // things cause the flow to return to the top of the beforeSend handler.
-      // So, the "selected" state is like "this was completed on this
-      // iteration", whereas the "complete" state is "this was completed on a
-      // previous iteration, so we don't have to go back to the top of
-      // beforeSend".
-      this.passphrase_state = "selected";
-    }
     $("#openpgpjs_key_select").dialog("close");
 
-    // This is required when sending emails and private keys are required for
-    // sending an email (when signing a message). These lines makes the client
-    // jump right back into beforeSend() allowing key sign and message send to
-    // be made as soon as the passphrase is correct and available.
-    if(this.passphrase_state == "selected") {
-      this.passphrase_state = "complete";
-      rcmail.command("send", this);
-    }
+    this.key_select_resolve_reject.resolve(selected_key);
   }
   window.set_passphrase = set_passphrase;
 
@@ -638,30 +617,52 @@ if(window.rcmail) {
         return false;
       }
 
-      if(this.passphrase_state == "init" && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
-        this.passphrase_state = "pending"; // Global var to notify set_passphrase
-        this.getting_passphrase_lock = rcmail.set_busy(true, 'getting_passphrase');
+      // We can only start encryption once the user has entered the passphrase.
+      // We will also not start sending the pubkey until that time.
+      // However, right away, we must have a pubkey_save_promise and an
+      // enc_sign_promise so that we can wait for them.
+      // Therefore, we create our own Promises that we will resolve when we
+      // have the passphrase.
+      var pubkey_save_resolve_reject;
+      var enc_sign_resolve_reject;
+      pubkey_save_promise = new Promise(function (resolve, reject) {
+        pubkey_save_resolve_reject = { resolve: resolve, reject: reject };
+      });
+
+      enc_sign_promise = new Promise(function (resolve, reject) {
+        enc_sign_resolve_reject = { resolve: resolve, reject: reject };
+      });
+
+      // Open the dialog to choose a key.
+      // We construct a Promise that will be resolved when the user has chosen
+      // a key and entered a passphrase.  The key_select_resolve_reject global
+      // var will be used by the dialog's close function, to return control
+      // back here.
+      new Promise(function (resolve, reject) {
         $("#openpgpjs_key_select").dialog("open");
-        return false;
-      }
+        this.key_select_resolve_reject = {resolve: resolve, reject: reject};
+      }).then(function (selected_key) {
+        // Now that they've chosen a key to sign with, we can save the sender's
+        // pubkey to the server.  We hadn't started this process before because
+        // we didn't know if the user would cancel instead of choosing a
+        // signing key.
+        // XXX I notice that the key they chose to sign with is not necessarily
+        // the same one that we're sending here.  We're sending the first
+        // pubkey associated with the sender's email address, whereas they
+        // could be signing with any private key they have.  We may want to
+        // send both pubkeys.
+        sendPubkey().then(function (pubkey_filename) {
+          pubkey_save_resolve_reject.resolve(pubkey_filename);
+        });
 
-      if (this.passphrase_state == "complete" && this.encryption_state == "init") {
-        this.encryption_state = "pending";
-
-        var passobj = this.passphrase;
-        var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
+        var privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
         console.log("The privkey", privkey);
 
         var enc_lock = rcmail.set_busy(true, 'signing');
-        rc_openpgpjs_crypto.sign(this.cleartext, privkey, passobj.passphrase).then((function (enc_lock, signed) {
-          rcmail.set_busy(false, null, enc_lock);
-
-          $("textarea#composebody").val(signed.data);
-          this.encryption_state = "complete";
-          console.log("Signing complete; going around again");
-          rcmail.command("send", this);
+        rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then((function (signed) {
+          enc_sign_resolve_reject.resolve(signed);
         }).bind(this, enc_lock));
-      }
+      });
     }
 
     // Wait for all the operations to complete.
@@ -674,6 +675,11 @@ if(window.rcmail) {
       // set a global var and call command send again
       this.finished_treating = true;
       rcmail.command("send", this);
+    }).catch(function () {
+      // If something went wrong, replace the cleartext back in the compose window.
+      // "Something went wrong" may be as simple as the user cancelled instead
+      // of choosing a key, or failed to enter the passphrase for the key.
+      $("textarea#composebody").val(window.cleartext);
     });
 
     // Block the send until our encryption tasks are done.
