@@ -99,7 +99,7 @@ rc_openpgpjs_crypto.prototype.sign = function (msg, privkey, passphrase) {
   return openpgp.decryptKey({privateKey: privkey, passphrase: passphrase}).then(function (priv_key) {
     return openpgp.sign({
       data: new String(msg),
-      privateKeys: [priv_key]
+      privateKeys: priv_key.key
     });
   });
 }
@@ -287,12 +287,10 @@ rc_openpgpjs_crypto.prototype.getPrivkey = function (armored) {
 }
 
 rc_openpgpjs_crypto.prototype.decryptSecretKey = function (i, p) {
-  try {
-    return openpgp.decryptKey(this.keyring.privateKeys.keys[i], p);
-  } catch(e) {
-    console.log(e);
-    return false;
-  }
+  return openpgp.decryptKey({
+    privateKey: this.keyring.privateKeys.keys[i],
+    passphrase: p
+  });
 }
 
 rc_openpgpjs_crypto.prototype.decryptSecretMPIsForId = function (id, passphrase) {

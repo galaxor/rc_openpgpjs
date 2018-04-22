@@ -310,31 +310,31 @@ if(window.rcmail) {
       this.key_select_resolve_reject.reject();
     }
 
-    var decryptedKey = rc_openpgpjs_crypto.decryptSecretKey(i, p);
-    console.log("Here's how it went down: ", decryptedKey);
-    if(!decryptedKey) {
+    rc_openpgpjs_crypto.decryptSecretKey(i, p)
+    .then(function (decryptedKey) {
+      var selected_key = { "id" : i, "passphrase" : p };
+
+      // We may have been entering a passphrase because we were attempting to
+      // read an encrypted message, and we needed the private key in order to do
+      // that.  In that case, we will want to process the message now.
+      // XXX I have not examined this flow yet.  It probably doesn't work, and it
+      // will probably change.
+      processReceived();
+
+      if($("#openpgpjs_rememberpass").is(":checked")) {
+        sessionStorage.setItem(i, this.passphrase);
+      }
+
+      $("#key_select_error").addClass("hidden");
+      $("#openpgpjs_key_select").dialog("close");
+
+      this.key_select_resolve_reject.resolve(selected_key);
+    }).catch(function (e) {
+      throw e;
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
       this.key_select_resolve_reject.reject();
-    }
-
-    var selected_key = { "id" : i, "passphrase" : p };
-
-    // We may have been entering a passphrase because we were attempting to
-    // read an encrypted message, and we needed the private key in order to do
-    // that.  In that case, we will want to process the message now.
-    // XXX I have not examined this flow yet.  It probably doesn't work, and it
-    // will probably change.
-    processReceived();
-
-    if($("#openpgpjs_rememberpass").is(":checked")) {
-      sessionStorage.setItem(i, this.passphrase);
-    }
-
-    $("#key_select_error").addClass("hidden");
-    $("#openpgpjs_key_select").dialog("close");
-
-    this.key_select_resolve_reject.resolve(selected_key);
+    });
   }
   window.set_passphrase = set_passphrase;
 
@@ -529,7 +529,7 @@ if(window.rcmail) {
     // We don't set it now because if we are signing, then we'll have to get a
     // password to unlock the private key.  Maybe the user cancels at that
     // point.
-    var enc_lock;
+    var enc_lock = rcmail.set_busy(true, 'encrypting');
 
     // Encrypt and sign
     if($("#openpgpjs_encrypt").is(":checked") && $("#openpgpjs_sign").is(":checked")) {
@@ -604,7 +604,6 @@ if(window.rcmail) {
 
       pubkey_save_promise = sendPubkey();
       
-      enc_lock = rcmail.set_busy(true, 'encrypting');
       enc_sign_promise = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext);
     }
 
@@ -656,18 +655,14 @@ if(window.rcmail) {
         });
 
         var privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
-        console.log("The privkey", privkey);
 
-        var enc_lock = rcmail.set_busy(true, 'signing');
-        rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then((function (signed) {
+        rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
           enc_sign_resolve_reject.resolve(signed);
-        }).bind(this, enc_lock));
+        });
       });
     }
 
     // Wait for all the operations to complete.
-    console.log("PSP", pubkey_save_promise);
-    console.log("ESP", enc_sign_promise);
     Promise.all([pubkey_save_promise, enc_sign_promise]).then(function ([pubkey_filename, encrypted]) {
       rcmail.set_busy(false, null, enc_lock);
       this.ciphertext = encrypted.data;
@@ -675,11 +670,13 @@ if(window.rcmail) {
       // set a global var and call command send again
       this.finished_treating = true;
       rcmail.command("send", this);
-    }).catch(function () {
+    }).catch(function (e) {
       // If something went wrong, replace the cleartext back in the compose window.
       // "Something went wrong" may be as simple as the user cancelled instead
       // of choosing a key, or failed to enter the passphrase for the key.
-      $("textarea#composebody").val(window.cleartext);
+      // XXX Not until we're sure this will never cause the mail to send!
+      // $("textarea#composebody").val(window.cleartext);
+      throw e;
     });
 
     // Block the send until our encryption tasks are done.
