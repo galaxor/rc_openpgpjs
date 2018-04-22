@@ -68,6 +68,12 @@ if(window.rcmail) {
     // are placed in this global variable.
     this.key_select_resolve_reject = null;
 
+    // The close function is called when the key is selected, but it's also
+    // called when the user cancels.  In order to distinguish these cases, we
+    // have the key_selected global var, which will be set to true by
+    // set_passphrase if we have successfully decrypted a key.
+    this.key_selected = false;
+
     $("#openpgpjs_key_select").dialog({
       modal: true,
       autoOpen: false,
@@ -77,6 +83,12 @@ if(window.rcmail) {
         updateKeySelector();
       },
       close: function() {
+        if (window.key_selected) {
+          // The user has successfully chosen a key.  Reset it to false for next time.
+          window.key_selected = false;
+        } else {
+          key_select_resolve_reject.reject("User cancelled");
+        }
         $("#selected_key_passphrase").val("");
         $("#openpgpjs_rememberpass").attr("checked", false);
       },
@@ -325,15 +337,15 @@ if(window.rcmail) {
         sessionStorage.setItem(i, this.passphrase);
       }
 
+      this.key_selected = true;
       $("#key_select_error").addClass("hidden");
       $("#openpgpjs_key_select").dialog("close");
 
       this.key_select_resolve_reject.resolve(selected_key);
-    }).catch(function (e) {
-      throw e;
+    },
+    function (decryptFailedReason) {
       $("#key_select_error").removeClass("hidden");
-      $("#key_select_error p").html(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
-      this.key_select_resolve_reject.reject();
+      $("#key_select_error p").text(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
     });
   }
   window.set_passphrase = set_passphrase;
@@ -481,6 +493,7 @@ if(window.rcmail) {
     // it back in there and allow the send to go through.
     console.log("FINished treating???", this.finished_treating);
     if (this.finished_treating) {
+      this.cleartext = null;
       $("textarea#composebody").val(this.ciphertext);
       return true;
     }
@@ -640,7 +653,7 @@ if(window.rcmail) {
       new Promise(function (resolve, reject) {
         $("#openpgpjs_key_select").dialog("open");
         this.key_select_resolve_reject = {resolve: resolve, reject: reject};
-      }).then(function (selected_key) {
+      }).then(function (selected_key) { // If the key select turned out ok.
         // Now that they've chosen a key to sign with, we can save the sender's
         // pubkey to the server.  We hadn't started this process before because
         // we didn't know if the user would cancel instead of choosing a
@@ -659,6 +672,12 @@ if(window.rcmail) {
         rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
           enc_sign_resolve_reject.resolve(signed);
         });
+      },
+      function (key_select_failed_reason) { // If the user cancelled the key select.
+        enc_sign_resolve_reject.reject(key_select_failed_reason);
+        rcmail.set_busy(false, null, enc_lock);
+        $("textarea#composebody").val(window.cleartext);
+        this.cleartext = null;
       });
     }
 
@@ -670,13 +689,16 @@ if(window.rcmail) {
       // set a global var and call command send again
       this.finished_treating = true;
       rcmail.command("send", this);
-    }).catch(function (e) {
-      // If something went wrong, replace the cleartext back in the compose window.
-      // "Something went wrong" may be as simple as the user cancelled instead
-      // of choosing a key, or failed to enter the passphrase for the key.
-      // XXX Not until we're sure this will never cause the mail to send!
-      // $("textarea#composebody").val(window.cleartext);
-      throw e;
+    },
+    function (failed_reason) {
+      // This should only happen if the user cancelled the key select, because
+      // this is only reached if an affirmative reject is called.  If an
+      // exception is thrown, control does not reach this.
+      // Still, replacing the text in the box happens closer to the time when
+      // we're sure the user affirmatively cancelled.  But we must have a
+      // handler here to handle the case where the promise is rejected.  If we
+      // don't, then the affirmative cancellation will bubble up and become an
+      // exception.  Instead, we should just quietly stop.
     });
 
     // Block the send until our encryption tasks are done.
