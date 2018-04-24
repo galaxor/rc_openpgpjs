@@ -544,59 +544,11 @@ if(window.rcmail) {
     // point.
     var enc_lock = rcmail.set_busy(true, 'encrypting');
 
-    // Encrypt and sign
-    if($("#openpgpjs_encrypt").is(":checked") && $("#openpgpjs_sign").is(":checked")) {
-      // get the private key
-      if((typeof this.passphrase == "undefined" || this.passphrase === "") && rc_openpgpjs_crypto.getPrivkeyCount() > 0) {
-        this.passphrase_state = "pending"; // Global var to notify set_passphrase
-        $("#openpgpjs_key_select").dialog("open");
-        return false;
-      }
-
-      if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
-        alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
-        return false;
-      }
-
-      var passobj = this.passphrase;
-      var privkey = rc_openpgpjs_crypto.getPrivkeyObj(passobj.id);
-
-      if(!privkey[0].decryptSecretMPIs(passobj.passphrase)) {
-        alert(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
-      }
-      // we now have the private key (for signing)
-      
-      // get the public key
-      var pubkeys = fetchRecipientPubkeys();
-      if(pubkeys.length === 0) {
-        return false;
-      }
-      // done public keys
-
-      // add the user's public key
-      var pubkey_sender = fetchSendersPubkey();
-      if (pubkey_sender) {
-        pubkeys.push(pubkey_sender);
-      } else {
-        if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
-          return false;
-        }
-      }
-      // end add user's public key
-
-      var encrypted = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, 1, privkey, passobj.passphrase);
-                
-      if(encrypted) {
-        $("textarea#composebody").val(encrypted);
-        this.finished_treating = true;
-        return true;
-      }
-    }
+    var encrypt_requested = $("#openpgpjs_encrypt").is(":checked");
+    var sign_requested = $("#openpgpjs_sign").is(":checked");
 
     // Encrypt only
-    if($("#openpgpjs_encrypt").is(":checked")
-       && !$("#openpgpjs_sign").is(":checked"))
-    {
+    if (encrypt_requested && !sign_requested) {
       // Fetch recipient pubkeys
       var pubkeys = fetchRecipientPubkeys();
       if(pubkeys.length === 0) {
@@ -618,12 +570,8 @@ if(window.rcmail) {
       pubkey_save_promise = sendPubkey();
       
       enc_sign_promise = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext);
-    }
-
-    // Sign only
-    if($("#openpgpjs_sign").is(":checked") &&
-       !$("#openpgpjs_encrypt").is(":checked")) {
-
+    } else {
+      // Sign only, or Encrypt+sign.
       if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
         alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
         return false;
@@ -669,9 +617,34 @@ if(window.rcmail) {
 
         var privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
 
-        rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
-          enc_sign_resolve_reject.resolve(signed);
-        });
+        if (encrypt_requested) {
+          // Fetch recipient pubkeys
+          var pubkeys = fetchRecipientPubkeys();
+          if(pubkeys.length === 0) {
+            // XXX We should notify the user that we've given up!
+            return false;
+          }
+          
+          // add the user's public key
+          var pubkey_sender = fetchSendersPubkey();
+          if (pubkey_sender) {
+            pubkeys.push(pubkey_sender);
+          } else {
+            if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
+              return false;
+            }
+          }
+          // end add user's public key
+
+          rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, privkey, selected_key.passphrase).then(function (encrypted) {
+            enc_sign_resolve_reject.resolve(encrypted);
+          });
+        } else {
+          // Sign only.
+          rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
+            enc_sign_resolve_reject.resolve(signed);
+          });
+        }
       },
       function (key_select_failed_reason) { // If the user cancelled the key select.
         enc_sign_resolve_reject.reject(key_select_failed_reason);

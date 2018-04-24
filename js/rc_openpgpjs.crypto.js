@@ -35,42 +35,28 @@ function rc_openpgpjs_crypto () {
  * @param pubkeys {Array}  Public keys
  * @param text    {String} Message to encrypt
  * @param sign    {Bool}   Sign and encrypt the message?
- * @param privkey {String} Required if sign is True
+ * @param privkey {openpgp.Key} If signing, this key must already be decrypted.
+ * @param passphrase {String} The passphrase to decrypt the private key, if signing.
  * @return {Promise<Object>} encrypted (and optionally signed message) in the form:
  *                           {data: ASCII armored message}
 
  */
 // TODO: Feed key armored and do openpgp.read_* here
 rc_openpgpjs_crypto.prototype.encrypt = function (pubkeys, text, sign, privkey, passphrase) {
-  sign = (typeof sign === "undefined") ? 0 : 1;
-  if(sign) {
-    privkey = (typeof privkey === "undefined") ? 0 : privkey;
-    passphrase = (typeof passphrase === "undefined") ? 0 : passphrase;
-
-    if(!privkey) {
-      alert("missing privkey");
-      return false;
-    }
-
-    if(!passphrase) {
-      alert("missing passphrase");
-      return false;
-    }
-
-    if (!privkey.decrypt(passphrase)) {
-        alert("Password for secrect key was incorrect!");
-        return;
-    }
-
-    const encrypted = openpgp.encrypt(text, pubkeys, privkey, passphrase, undefined, true);
-    return(encrypted);
+  if (sign) {
+    return openpgp.decryptKey({privateKey: privkey, passphrase: passphrase}).then(function (decrypted_privkey) {
+      return openpgp.sign({
+        data: new String(text),
+        privateKeys: decrypted_privkey.key
+      });
+    });
+  } else {
+    return openpgp.encrypt({
+      data: new String(text),
+      publicKeys: pubkeys,
+      privateKeys: privkey
+    });
   }
-
-  const promise = openpgp.encrypt({
-    data: new String(text),
-    publicKeys: pubkeys
-  });
-  return(promise);
 }
 
 /**
@@ -96,10 +82,10 @@ rc_openpgpjs_crypto.prototype.generateKeys = function (bits, ident, passphrase) 
  *                            {data: ASCII armored message}
  */
 rc_openpgpjs_crypto.prototype.sign = function (msg, privkey, passphrase) {
-  return openpgp.decryptKey({privateKey: privkey, passphrase: passphrase}).then(function (priv_key) {
+  return openpgp.decryptKey({privateKey: privkey, passphrase: passphrase}).then(function (decrypted_privkey) {
     return openpgp.sign({
       data: new String(msg),
-      privateKeys: priv_key.key
+      privateKeys: decrypted_privkey.key
     });
   });
 }
