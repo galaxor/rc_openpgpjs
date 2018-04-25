@@ -547,112 +547,97 @@ if(window.rcmail) {
     var encrypt_requested = $("#openpgpjs_encrypt").is(":checked");
     var sign_requested = $("#openpgpjs_sign").is(":checked");
 
-    // Encrypt only
-    if (encrypt_requested && !sign_requested) {
-      // Fetch recipient pubkeys
-      var pubkeys = fetchRecipientPubkeys();
-      if(pubkeys.length === 0) {
-        // XXX We should notify the user that we've given up!
-        return false;
-      }
-      
-      // add the user's public key
-      var pubkey_sender = fetchSendersPubkey();
-      if (pubkey_sender) {
-        pubkeys.push(pubkey_sender);
-      } else {
-        if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
-          return false;
-        }
-      }
-      // end add user's public key
+    // Sign only, or Encrypt+sign.
+    if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
+      alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
+      return false;
+    }
 
-      pubkey_save_promise = sendPubkey();
-      
-      enc_sign_promise = rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext);
-    } else {
-      // Sign only, or Encrypt+sign.
-      if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
-        alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
-        return false;
-      }
+    // We can only start encryption once the user has entered the passphrase.
+    // We will also not start sending the pubkey until that time.
+    // However, right away, we must have a pubkey_save_promise and an
+    // enc_sign_promise so that we can wait for them.
+    // Therefore, we create our own Promises that we will resolve when we
+    // have the passphrase.
+    var pubkey_save_resolve_reject;
+    var enc_sign_resolve_reject;
+    pubkey_save_promise = new Promise(function (resolve, reject) {
+      pubkey_save_resolve_reject = { resolve: resolve, reject: reject };
+    });
 
-      // We can only start encryption once the user has entered the passphrase.
-      // We will also not start sending the pubkey until that time.
-      // However, right away, we must have a pubkey_save_promise and an
-      // enc_sign_promise so that we can wait for them.
-      // Therefore, we create our own Promises that we will resolve when we
-      // have the passphrase.
-      var pubkey_save_resolve_reject;
-      var enc_sign_resolve_reject;
-      pubkey_save_promise = new Promise(function (resolve, reject) {
-        pubkey_save_resolve_reject = { resolve: resolve, reject: reject };
-      });
+    enc_sign_promise = new Promise(function (resolve, reject) {
+      enc_sign_resolve_reject = { resolve: resolve, reject: reject };
+    });
 
-      enc_sign_promise = new Promise(function (resolve, reject) {
-        enc_sign_resolve_reject = { resolve: resolve, reject: reject };
-      });
-
-      // Open the dialog to choose a key.
-      // We construct a Promise that will be resolved when the user has chosen
-      // a key and entered a passphrase.  The key_select_resolve_reject global
-      // var will be used by the dialog's close function, to return control
-      // back here.
-      new Promise(function (resolve, reject) {
+    // Open the dialog to choose a key.
+    // We construct a Promise that will be resolved when the user has chosen
+    // a key and entered a passphrase.  The key_select_resolve_reject global
+    // var will be used by the dialog's close function, to return control
+    // back here.
+    new Promise(function (resolve, reject) {
+      if (sign_requested) {
         $("#openpgpjs_key_select").dialog("open");
         this.key_select_resolve_reject = {resolve: resolve, reject: reject};
-      }).then(function (selected_key) { // If the key select turned out ok.
-        // Now that they've chosen a key to sign with, we can save the sender's
-        // pubkey to the server.  We hadn't started this process before because
-        // we didn't know if the user would cancel instead of choosing a
-        // signing key.
-        // XXX I notice that the key they chose to sign with is not necessarily
-        // the same one that we're sending here.  We're sending the first
-        // pubkey associated with the sender's email address, whereas they
-        // could be signing with any private key they have.  We may want to
-        // send both pubkeys.
-        sendPubkey().then(function (pubkey_filename) {
-          pubkey_save_resolve_reject.resolve(pubkey_filename);
-        });
+      } else {
+        // If we don't have to sign, they don't need to pick a key or decrypt it.
+        resolve(null);
+      }
+    }).then(function (selected_key) { // If the key select turned out ok.
+      // Now that they've chosen a key to sign with, we can save the sender's
+      // pubkey to the server.  We hadn't started this process before because
+      // we didn't know if the user would cancel instead of choosing a
+      // signing key.
+      // XXX I notice that the key they chose to sign with is not necessarily
+      // the same one that we're sending here.  We're sending the first
+      // pubkey associated with the sender's email address, whereas they
+      // could be signing with any private key they have.  We may want to
+      // send both pubkeys.
+      sendPubkey().then(function (pubkey_filename) {
+        pubkey_save_resolve_reject.resolve(pubkey_filename);
+      });
 
-        var privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
+      var privkey;
+      var privkey_passphrase;
+      if (sign_requested) {
+        privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
+        privkey_passphrase = selected_key.passphrase;
+      }
 
-        if (encrypt_requested) {
-          // Fetch recipient pubkeys
-          var pubkeys = fetchRecipientPubkeys();
-          if(pubkeys.length === 0) {
-            // XXX We should notify the user that we've given up!
+      if (encrypt_requested) {
+        // Fetch recipient pubkeys
+        var pubkeys = fetchRecipientPubkeys();
+        if(pubkeys.length === 0) {
+          // XXX We should notify the user that we've given up!
+          return false;
+        }
+        
+        // add the user's public key
+        var pubkey_sender = fetchSendersPubkey();
+        if (pubkey_sender) {
+          pubkeys.push(pubkey_sender);
+        } else {
+          if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
             return false;
           }
-          
-          // add the user's public key
-          var pubkey_sender = fetchSendersPubkey();
-          if (pubkey_sender) {
-            pubkeys.push(pubkey_sender);
-          } else {
-            if (!confirm("Couldn't find your public key. You will not be able to decrypt this message. Continue?")) {
-              return false;
-            }
-          }
-          // end add user's public key
-
-          rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, privkey, selected_key.passphrase).then(function (encrypted) {
-            enc_sign_resolve_reject.resolve(encrypted);
-          });
-        } else {
-          // Sign only.
-          rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
-            enc_sign_resolve_reject.resolve(signed);
-          });
         }
-      },
-      function (key_select_failed_reason) { // If the user cancelled the key select.
-        enc_sign_resolve_reject.reject(key_select_failed_reason);
-        rcmail.set_busy(false, null, enc_lock);
-        $("textarea#composebody").val(window.cleartext);
-        this.cleartext = null;
-      });
-    }
+        // end add user's public key
+
+        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, privkey, privkey_passphrase).then(function (encrypted) {
+          enc_sign_resolve_reject.resolve(encrypted);
+        });
+      } else {
+        // Sign only.
+        rc_openpgpjs_crypto.sign(this.cleartext, privkey, privkey_passphrase).then(function (signed) {
+          enc_sign_resolve_reject.resolve(signed);
+        });
+      }
+    },
+    function (key_select_failed_reason) { // If the user cancelled the key select.
+      enc_sign_resolve_reject.reject(key_select_failed_reason);
+      rcmail.set_busy(false, null, enc_lock);
+      $("textarea#composebody").val(window.cleartext);
+      this.cleartext = null;
+    });
 
     // Wait for all the operations to complete.
     Promise.all([pubkey_save_promise, enc_sign_promise]).then(function ([pubkey_filename, encrypted]) {
