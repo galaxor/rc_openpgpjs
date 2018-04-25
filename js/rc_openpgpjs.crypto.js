@@ -45,16 +45,16 @@ function rc_openpgpjs_crypto () {
 rc_openpgpjs_crypto.prototype.encrypt = function (pubkeys, text, sign, privkey, passphrase) {
   if (sign) {
     return openpgp.decryptKey({privateKey: privkey, passphrase: passphrase}).then(function (decrypted_privkey) {
-      return openpgp.sign({
+      return openpgp.encrypt({
         data: new String(text),
+        publicKeys: pubkeys,
         privateKeys: decrypted_privkey.key
       });
     });
   } else {
     return openpgp.encrypt({
       data: new String(text),
-      publicKeys: pubkeys,
-      privateKeys: privkey
+      publicKeys: pubkeys
     });
   }
 }
