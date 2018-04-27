@@ -91,9 +91,6 @@ if(window.rcmail) {
         }
         $("#selected_key_passphrase").val("");
         $("#openpgpjs_rememberpass").attr("checked", false);
-
-        $("#openpgpjs_key_select .formbuttons input[type=submit]").removeClass("hidden");
-        $("#openpgpjs_key_select .spinner").addClass("hidden");
       },
     });
 	
@@ -345,9 +342,6 @@ if(window.rcmail) {
 
       this.key_selected = true;
       $("#key_select_error").addClass("hidden");
-      // XXX The dialog sticks around for a long time after you hit enter.  I
-      // should add some UI that shows that it received the passphrase and is
-      // working on decrypting it.
       $("#openpgpjs_key_select").dialog("close");
 
       this.key_select_resolve_reject.resolve(selected_key);
@@ -607,6 +601,19 @@ if(window.rcmail) {
         pubkey_save_resolve_reject.resolve(pubkey_filename);
       });
 
+      // Even though selected_key contains the id and passphrase we need, we
+      // set up some local variables.  That's because this code is shared with
+      // the "Encrypt Only" code, were we will not set a private key, and thus
+      // not set a passphrase.  In those situations, we need to pass
+      // "undefined" to rc_openpgpjs_crypto.encrypt as the privkey and
+      // privkey_passphrase.  That's how openpgpjs will know that we don't
+      // intend to sign the message.
+      // In the situation where we are doing "Encrypt Only", selected_key will
+      // be undefined, and thus attempting to access selected_key.id and
+      // selected_key.passphrase will throw an error.  This is not what we
+      // want.  So instead, we declare local variables, but don't set them.
+      // That means their default value is "undefined".  We can set them, then,
+      // only if we intend to sign the message.
       var privkey;
       var privkey_passphrase;
       if (sign_requested) {
@@ -668,6 +675,12 @@ if(window.rcmail) {
       // handler here to handle the case where the promise is rejected.  If we
       // don't, then the affirmative cancellation will bubble up and become an
       // exception.  Instead, we should just quietly stop.
+    }).then(function () {
+      // If we were using a private key, the key select dialog was showing that
+      // we were working, while we encrypted/signed.  Now that we're done,
+      // update the UI.
+      $("#openpgpjs_key_select .formbuttons input[type=submit]").removeClass("hidden");
+      $("#openpgpjs_key_select .spinner").addClass("hidden");
     });
 
     // Block the send until our encryption tasks are done.
