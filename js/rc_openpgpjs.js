@@ -91,6 +91,9 @@ if(window.rcmail) {
         }
         $("#selected_key_passphrase").val("");
         $("#openpgpjs_rememberpass").attr("checked", false);
+
+        $("#openpgpjs_key_select .formbuttons input[type=submit]").removeClass("hidden");
+        $("#openpgpjs_key_select .spinner").addClass("hidden");
       },
     });
 	
@@ -322,8 +325,9 @@ if(window.rcmail) {
       this.key_select_resolve_reject.reject();
     }
 
-    console.log("Start decrypt secret key");
-    $("#openpgpjs_key_select #spinner").show();
+    $("#openpgpjs_key_select .formbuttons input[type=submit]").addClass("hidden");
+    $("#openpgpjs_key_select .spinner").removeClass("hidden");
+
     rc_openpgpjs_crypto.decryptSecretKey(i, p)
     .then(function (decryptedKey) {
       var selected_key = { "id" : i, "passphrase" : p };
@@ -344,7 +348,6 @@ if(window.rcmail) {
       // XXX The dialog sticks around for a long time after you hit enter.  I
       // should add some UI that shows that it received the passphrase and is
       // working on decrypting it.
-      $("#openpgpjs_key_select #spinner").hide();
       $("#openpgpjs_key_select").dialog("close");
 
       this.key_select_resolve_reject.resolve(selected_key);
@@ -352,6 +355,9 @@ if(window.rcmail) {
     function (decryptFailedReason) {
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").text(rcmail.gettext("incorrect_pass", "rc_openpgpjs"));
+
+      $("#openpgpjs_key_select .formbuttons input[type=submit]").removeClass("hidden");
+      $("#openpgpjs_key_select .spinner").addClass("hidden");
     });
   }
   window.set_passphrase = set_passphrase;

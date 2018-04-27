@@ -6,10 +6,6 @@
     background: url("images/openpgp.png") 4px -23px no-repeat;
 }
 
-#spinner.notworking {
-  display: none;
-}
-
 .hidden {
   display: none; 
   visibility: hidden;
