@@ -585,7 +585,7 @@ if(window.rcmail) {
         this.key_select_resolve_reject = {resolve: resolve, reject: reject};
       } else {
         // If we don't have to sign, they don't need to pick a key or decrypt it.
-        resolve(null);
+        resolve({id: undefined, passphrase: undefined});
       }
     }).then(function (selected_key) { // If the key select turned out ok.
       // Now that they've chosen a key to sign with, we can save the sender's
@@ -601,24 +601,11 @@ if(window.rcmail) {
         pubkey_save_resolve_reject.resolve(pubkey_filename);
       });
 
-      // Even though selected_key contains the id and passphrase we need, we
-      // set up some local variables.  That's because this code is shared with
-      // the "Encrypt Only" code, were we will not set a private key, and thus
-      // not set a passphrase.  In those situations, we need to pass
-      // "undefined" to rc_openpgpjs_crypto.encrypt as the privkey and
-      // privkey_passphrase.  That's how openpgpjs will know that we don't
-      // intend to sign the message.
-      // In the situation where we are doing "Encrypt Only", selected_key will
-      // be undefined, and thus attempting to access selected_key.id and
-      // selected_key.passphrase will throw an error.  This is not what we
-      // want.  So instead, we declare local variables, but don't set them.
-      // That means their default value is "undefined".  We can set them, then,
-      // only if we intend to sign the message.
+      // This will stay as "undefined" if we're doing "Encrypt Only", which is
+      // what openpgpjs expects if we don't intend to sign.
       var privkey;
-      var privkey_passphrase;
       if (sign_requested) {
         privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
-        privkey_passphrase = selected_key.passphrase;
       }
 
       if (encrypt_requested) {
@@ -640,12 +627,12 @@ if(window.rcmail) {
         }
         // end add user's public key
 
-        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, privkey, privkey_passphrase).then(function (encrypted) {
+        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, privkey, selected_key.passphrase).then(function (encrypted) {
           enc_sign_resolve_reject.resolve(encrypted);
         });
       } else {
         // Sign only.
-        rc_openpgpjs_crypto.sign(this.cleartext, privkey, privkey_passphrase).then(function (signed) {
+        rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
           enc_sign_resolve_reject.resolve(signed);
         });
       }
