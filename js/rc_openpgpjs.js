@@ -322,6 +322,8 @@ if(window.rcmail) {
       this.key_select_resolve_reject.reject();
     }
 
+    console.log("Start decrypt secret key");
+    $("#openpgpjs_key_select #spinner").show();
     rc_openpgpjs_crypto.decryptSecretKey(i, p)
     .then(function (decryptedKey) {
       var selected_key = { "id" : i, "passphrase" : p };
@@ -339,6 +341,10 @@ if(window.rcmail) {
 
       this.key_selected = true;
       $("#key_select_error").addClass("hidden");
+      // XXX The dialog sticks around for a long time after you hit enter.  I
+      // should add some UI that shows that it received the passphrase and is
+      // working on decrypting it.
+      $("#openpgpjs_key_select #spinner").hide();
       $("#openpgpjs_key_select").dialog("close");
 
       this.key_select_resolve_reject.resolve(selected_key);
@@ -491,7 +497,6 @@ if(window.rcmail) {
 
     // If we're finished with everything, and the ciphertext is computed, put
     // it back in there and allow the send to go through.
-    console.log("FINished treating???", this.finished_treating);
     if (this.finished_treating) {
       this.cleartext = null;
       $("textarea#composebody").val(this.ciphertext);
@@ -842,9 +847,9 @@ if(window.rcmail) {
    *
    * @param i {Integer} Used as openpgp.keyring[private|public]Keys[i]
    */
-  function select_key(i) {
+  function select_key(i, j) {
     fingerprint = rc_openpgpjs_crypto.getFingerprint(i, true, false);
-    $("#openpgpjs_selected").html("<strong>" + rcmail.gettext("selected", "rc_openpgpjs") + ":</strong> " + $(".clickme#" + fingerprint).html());
+    $("#openpgpjs_selected").html("<strong>" + rcmail.gettext("selected", "rc_openpgpjs") + ":</strong> " + $(".clickme#" + fingerprint+"-"+j).html());
     $("#openpgpjs_selected_id").val(i);
     $("#passphrase").val("");
   }
@@ -867,8 +872,8 @@ if(window.rcmail) {
         for (var j = 0; j < persons.length; j++) {
           fingerprint = rc_openpgpjs_crypto.getFingerprint(i, true, false);
           person = persons[j];
-          $("#openpgpjs_key_select_list").append("<div class=\"clickme\" id=\"" + fingerprint +"\" onclick=\"select_key(" + i + ");\"></div>");
-          $("#openpgpjs_key_select_list #"+fingerprint).text(fingerprint+" "+person);
+          $("#openpgpjs_key_select_list").append("<div class=\"clickme\" id=\""+fingerprint+"-"+j+"\" onclick=\"select_key("+i+", "+j+");\"></div>");
+          $("#openpgpjs_key_select_list #"+fingerprint+"-"+j).text(fingerprint+" "+person);
         }
       }
 
