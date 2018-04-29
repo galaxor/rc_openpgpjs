@@ -52,10 +52,6 @@ if(window.rcmail) {
     this.pubkey_save_resolve = null;
     rcmail.addEventListener("plugin.pubkey_save_callback", pubkey_save_callback);
 
-    if(sessionStorage.length > 0) {
-      this.passphrase = sessionStorage[0];
-    }
-
     // This dialog contains a form which calls the set_passphrase function onsubmit.
     // It is set_passphrase's responsibility to close the dialog if the user
     // successfully chose a key and entered a passphrase.  But the user can
@@ -126,7 +122,7 @@ if(window.rcmail) {
     if(rcmail.env.action === "compose") {
       rcmail.addEventListener("change_identity", function() {
         sessionStorage.clear();
-        this.passphrase = "";
+        this.passphrase = undefined;
       });
       // Disable draft autosave and prompt user when saving plaintext message as draft
       rcmail.env.draft_autosave = 0;
@@ -315,7 +311,7 @@ if(window.rcmail) {
    * @param p {String}  The passphrase
    */
   // TODO: move passphrase checks from old decrypt() to here
-  function set_passphrase(keyId, p) {
+  function set_passphrase(keyId, passphrase) {
     if(keyId === "-1") {
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").html(rcmail.gettext("select_key", "rc_openpgpjs"));
@@ -325,7 +321,7 @@ if(window.rcmail) {
     $("#openpgpjs_key_select .formbuttons input[type=submit]").addClass("hidden");
     $("#openpgpjs_key_select .spinner").removeClass("hidden");
 
-    rc_openpgpjs_crypto.decryptSecretKey(keyId, p)
+    rc_openpgpjs_crypto.decryptSecretKey(keyId, passphrase)
     .then(function (decryptedKey) {
       // We may have been entering a passphrase because we were attempting to
       // read an encrypted message, and we needed the private key in order to do
@@ -342,8 +338,7 @@ if(window.rcmail) {
       // against that which would not also work against this, but this seemed
       // safer.
       if($("#openpgpjs_rememberpass").is(":checked")) {
-        console.log("DKMY", decryptedKey, decryptedKey.primaryKey.getKeyId())
-        sessionStorage.setItem("rc_openpgpjs:selected_key", JSON.stringify({id:keyId, passphrase:this.passphrase}));
+        sessionStorage.setItem("rc_openpgpjs:selected_key", JSON.stringify({id:keyId, passphrase:passphrase}));
       }
 
       this.key_selected = true;
@@ -590,10 +585,21 @@ if(window.rcmail) {
         // If they have a saved key selection, we don't need to bring up the key select dialog.
         var selected_key = JSON.parse(sessionStorage.getItem("rc_openpgpjs:selected_key"));
         if (selected_key) {
-          resolve(selected_key);
+          rc_openpgpjs_crypto.decryptSecretKey(selected_key.id, selected_key.passphrase)
+          .then(function (decryptedKey) {
+            resolve(decryptedKey);
+          },
+          function (failed_reason) {
+            // If the key was deleted from the keyring after we saved the
+            // preference, or had its passphrase changed, then the decrypt will
+            // fail.  In that case, we should simply open the key select dialog
+            // and allow the user to choose a new key.
+            this.key_select_resolve_reject = {resolve: resolve, reject: reject};
+            $("#openpgpjs_key_select").dialog("open");
+          });
         } else {
-          $("#openpgpjs_key_select").dialog("open");
           this.key_select_resolve_reject = {resolve: resolve, reject: reject};
+          $("#openpgpjs_key_select").dialog("open");
         }
       } else {
         // If we don't have to sign, they don't need to pick a key or decrypt it.
@@ -665,14 +671,22 @@ if(window.rcmail) {
       rcmail.command("send", this);
     },
     function (failed_reason) {
-      // This should only happen if the user cancelled the key select, because
-      // this is only reached if an affirmative reject is called.  If an
-      // exception is thrown, control does not reach this.
-      // Still, replacing the text in the box happens closer to the time when
-      // we're sure the user affirmatively cancelled.  But we must have a
-      // handler here to handle the case where the promise is rejected.  If we
-      // don't, then the affirmative cancellation will bubble up and become an
-      // exception.  Instead, we should just quietly stop.
+      // This may happen if the user affirmatively cancelled the key select.
+      // If we don't catch that case, then the cancellation will bubble up and
+      // become an exception, when really this isn't an exceptional case and we
+      // should just quietly stop.
+      // However, we also reach this if an exception is thrown from certain
+      // points in the code.  If we catch that case and quietly stop, then we
+      // will have swallowed an error that the developers need, and that the
+      // users should see.
+      // To distinguish between these cases, check the "failed_reason".  If the
+      // user affirmatively cancelled, then "failed_reason" should be the
+      // string "User cancelled".  Otherwise, it is probably an exception that
+      // we should re-throw.
+
+      if (failed_reason != "User cancelled") {
+        throw failed_reason;
+      }
     }).then(function () {
       // If we were using a private key, the key select dialog was showing that
       // we were working, while we encrypted/signed.  Now that we're done,
@@ -881,7 +895,8 @@ if(window.rcmail) {
 
     // Only one key in keyring, nothing to select from
     if(rc_openpgpjs_crypto.getPrivkeyCount() === 1) {
-      $("#openpgpjs_selected_id").val(0);
+      var keyId = rc_openpgpjs_crypto.getKeyID(0, true, true);
+      $("#openpgpjs_selected_id").val(keyId);
     } else {
       // Selected set as $("#openpgpjs_selected_id").val(), then get that value from set_passphrase
       for (var i = 0; i < rc_openpgpjs_crypto.getPrivkeyCount(); i++) {

@@ -267,7 +267,7 @@ rc_openpgpjs_crypto.prototype.decryptSecretKey = function (keyId, p) {
   const keys = this.keyring.getKeysForId(keyId, true);
   if (keys == null) {
     // If no keys match that keyId, return a pre-rejected Promise, showing that decryption failed.
-    return new Promise.reject();
+    return Promise.reject();
   } else {
     for (var i=0; i<keys.length; i++) {
       if (keys[i].isPrivate()) {
@@ -281,7 +281,7 @@ rc_openpgpjs_crypto.prototype.decryptSecretKey = function (keyId, p) {
 
   // Oops, there were no secret keys matching that keyId.
   // Return a pre-rejected Promise, showing that decryption failed.
-  return new Promise.reject();
+  return Promise.reject();
 }
 
 rc_openpgpjs_crypto.prototype.decryptSecretMPIsForId = function (id, passphrase) {
