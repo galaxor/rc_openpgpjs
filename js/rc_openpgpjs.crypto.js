@@ -332,14 +332,13 @@ rc_openpgpjs_crypto.prototype.removeKey = function (i, getPrivate) {
 	}
 
         var key_id = this.getKeyID(i, getPrivate, true);
-        console.log("RMV", key_id);
 
         var ret;
 	if (getPrivate) {
 		ret = this.keyring.privateKeys.removeForId(key_id);
-	}
-
-	ret = this.keyring.publicKeys.removeForId(key_id);
+	} else {
+                ret = this.keyring.publicKeys.removeForId(key_id);
+        }
 
         if (ret !== null) {
           this.keyring.store();
