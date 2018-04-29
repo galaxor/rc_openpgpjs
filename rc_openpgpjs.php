@@ -115,6 +115,25 @@ class rc_openpgpjs extends rcube_plugin {
                 html::span('composeoption', html::label(null, $sign->show() . $this->gettext('sign'))),
                 "composeoptions"
               );
+
+              $this->api->add_content(
+                html::div(
+                  array(
+                    'id' => 'rc_openpgpjs-remembered-key',
+                    'title' => $this->gettext('remembered_key_tooltip'),
+                  ),
+                  $this->gettext('remembered_key')
+                  . html::span(array('id' => 'rc_openpgpjs-remembered-keyid'), "This is where the remembered key would go.")
+                  . html::div(
+                      array(
+                        'id' => 'rc_openpgpjs-forget-key',
+                        'title' => $this->gettext('forget_remembered_key_tooltip'),
+                      ),
+                      $this->gettext('forget_remembered_key')
+                    )
+                ),
+                "composeoptions"
+              );
             }
         }
       }

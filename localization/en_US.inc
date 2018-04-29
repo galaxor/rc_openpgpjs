@@ -70,3 +70,8 @@ $labels['no_self_cert'] = "No self cert";
 
 $labels['unknown_error'] = "Received an unknown error from the server.";
 $labels['server_said'] = "The server said:";
+
+$labels['remembered_key_tooltip'] = "This key will be used for sending signed or encrypted+signed messages. You will not need to enter a passphrase because you entered one before and indicated that you wanted it to be saved for the remainder of your session. If you want your browser to forget the passphrase, or you want to choose a different key to sign messages with, click the X.";
+$labels['remembered_key'] = "Using Key:";
+$labels['forget_remembered_key'] = "X";
+$labels['forget_remembered_key_tooltip'] = "Click here if you want your browser to forget the passphrase you entered before, or if you want to choose a different key to sign messages with.";
