@@ -311,12 +311,12 @@ if(window.rcmail) {
    * Set passphrase.
    * This will be called by the #openpgpjs_key_select dialog.
    *
-   * @param i {Integer} Used as this.keyring.[private|public]Keys.keys[i]
+   * @param keyId {String} The 16 hex char keyId that can be used by openpgp.Keyring.getKeysForId.
    * @param p {String}  The passphrase
    */
   // TODO: move passphrase checks from old decrypt() to here
-  function set_passphrase(i, p) {
-    if(i === "-1") {
+  function set_passphrase(keyId, p) {
+    if(keyId === "-1") {
       $("#key_select_error").removeClass("hidden");
       $("#key_select_error p").html(rcmail.gettext("select_key", "rc_openpgpjs"));
       this.key_select_resolve_reject.reject();
@@ -325,10 +325,8 @@ if(window.rcmail) {
     $("#openpgpjs_key_select .formbuttons input[type=submit]").addClass("hidden");
     $("#openpgpjs_key_select .spinner").removeClass("hidden");
 
-    rc_openpgpjs_crypto.decryptSecretKey(i, p)
+    rc_openpgpjs_crypto.decryptSecretKey(keyId, p)
     .then(function (decryptedKey) {
-      var selected_key = { "id" : i, "passphrase" : p };
-
       // We may have been entering a passphrase because we were attempting to
       // read an encrypted message, and we needed the private key in order to do
       // that.  In that case, we will want to process the message now.
@@ -336,16 +334,23 @@ if(window.rcmail) {
       // will probably change.
       processReceived();
 
+      // If they want us to remember their key, then instead of storing the
+      // decrypted key, we'll store the keyId and passphrase.  That's enough
+      // info to get the key and decrypt it, but I had a feeling it was not
+      // safe to keep a complete, decrypted key in session storage.
+      // Off the top of my head, I can't think of an attack that would work
+      // against that which would not also work against this, but this seemed
+      // safer.
       if($("#openpgpjs_rememberpass").is(":checked")) {
         console.log("DKMY", decryptedKey, decryptedKey.primaryKey.getKeyId())
-        sessionStorage.setItem("rc_openpgpjs:selected_key", JSON.stringify({id:i, passphrase:this.passphrase}));
+        sessionStorage.setItem("rc_openpgpjs:selected_key", JSON.stringify({id:keyId, passphrase:this.passphrase}));
       }
 
       this.key_selected = true;
       $("#key_select_error").addClass("hidden");
       $("#openpgpjs_key_select").dialog("close");
 
-      this.key_select_resolve_reject.resolve(selected_key);
+      this.key_select_resolve_reject.resolve(decryptedKey);
     },
     function (decryptFailedReason) {
       $("#key_select_error").removeClass("hidden");
@@ -608,13 +613,6 @@ if(window.rcmail) {
         pubkey_save_resolve_reject.resolve(pubkey_filename);
       });
 
-      // This will stay as "undefined" if we're doing "Encrypt Only", which is
-      // what openpgpjs expects if we don't intend to sign.
-      var privkey;
-      if (sign_requested) {
-        privkey = rc_openpgpjs_crypto.getPrivkeyObj(selected_key.id);
-      }
-
       if (encrypt_requested) {
         // Fetch recipient pubkeys
         var pubkeys = fetchRecipientPubkeys();
@@ -634,12 +632,18 @@ if(window.rcmail) {
         }
         // end add user's public key
 
-        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, privkey, selected_key.passphrase).then(function (encrypted) {
+        // This will stay as "undefined" if we're doing "Encrypt Only", which is
+        // what openpgpjs expects if we don't intend to sign.
+        var privkey;
+        if (sign_requested) {
+          privkey = selected_key;
+        }
+        rc_openpgpjs_crypto.encrypt(pubkeys, this.cleartext, sign_requested, selected_key).then(function (encrypted) {
           enc_sign_resolve_reject.resolve(encrypted);
         });
       } else {
         // Sign only.
-        rc_openpgpjs_crypto.sign(this.cleartext, privkey, selected_key.passphrase).then(function (signed) {
+        rc_openpgpjs_crypto.sign(this.cleartext, selected_key).then(function (signed) {
           enc_sign_resolve_reject.resolve(signed);
         });
       }
@@ -661,7 +665,6 @@ if(window.rcmail) {
       rcmail.command("send", this);
     },
     function (failed_reason) {
-      throw failed_reason;
       // This should only happen if the user cancelled the key select, because
       // this is only reached if an affirmative reject is called.  If an
       // exception is thrown, control does not reach this.
