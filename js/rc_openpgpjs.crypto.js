@@ -178,37 +178,33 @@ rc_openpgpjs_crypto.prototype.getFingerprint = function (i, getPrivate, niceform
 	}
 
 	if(getPrivate == false) {
-		fingerprint = openpgp.util.hexstrdump(this.keyring.publicKeys.keys[i].primaryKey.getFingerprint()).toUpperCase();
+		fingerprint = openpgp.util.hexstrdump(this.keyring.publicKeys.keys[i].primaryKey.getFingerprint());
 	} else {
-		fingerprint = openpgp.util.hexstrdump(this.keyring.privateKeys.keys[i].primaryKey.getFingerprint()).toUpperCase();
+		fingerprint = openpgp.util.hexstrdump(this.keyring.privateKeys.keys[i].primaryKey.getFingerprint());
 	}
 
 	if(niceformat) {
-		fingerprint = fingerprint.replace(/(.{2})/g, "$1 ");
+		fingerprint = fingerprint.replace(/(.{2})/g, "$1 ").toUpperCase();
 	} else {
-		fingerprint = "0x" + fingerprint.substring(0, 8);
+		fingerprint = fingerprint;
 	}
 
 	return fingerprint;
 }
 
-rc_openpgpjs_crypto.prototype.getKeyID = function (i, getPrivate, full) {
-	if (typeof getPrivate == "undefined") { getPrivate = false; }
-        if (typeof full == "undefined") { full = false; }
-
+rc_openpgpjs_crypto.prototype.getKeyID = function (i, getPrivate, machine_readable) {
         var key_id;
 
-	if(getPrivate == false) {
-		key_id = this.keyring.publicKeys.keys[i].primaryKey.getKeyId();
-	} else {
+	if(getPrivate) {
 	        key_id = this.keyring.privateKeys.keys[i].primaryKey.getKeyId();
+	} else {
+		key_id = this.keyring.publicKeys.keys[i].primaryKey.getKeyId();
 	}
         
-        const fullstr = openpgp.util.hexstrdump(key_id.bytes);
-        if (full) {
-          return fullstr;
+        if (machine_readable) {
+          return openpgp.util.hexstrdump(key_id.bytes);
         } else {
-          const key_id_str = "0x" + openpgp.util.hexstrdump(key_id.bytes).toUpperCase().substring(8);
+          const key_id_str = "0x" + openpgp.util.hexstrdump(key_id.bytes).toUpperCase();
           return key_id_str;
         }
 }

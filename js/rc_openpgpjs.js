@@ -337,7 +337,8 @@ if(window.rcmail) {
       processReceived();
 
       if($("#openpgpjs_rememberpass").is(":checked")) {
-        sessionStorage.setItem(i, this.passphrase);
+        console.log("DKMY", decryptedKey, decryptedKey.primaryKey.getKeyId())
+        sessionStorage.setItem("rc_openpgpjs:selected_key", JSON.stringify({id:i, passphrase:this.passphrase}));
       }
 
       this.key_selected = true;
@@ -581,8 +582,14 @@ if(window.rcmail) {
     // back here.
     new Promise(function (resolve, reject) {
       if (sign_requested) {
-        $("#openpgpjs_key_select").dialog("open");
-        this.key_select_resolve_reject = {resolve: resolve, reject: reject};
+        // If they have a saved key selection, we don't need to bring up the key select dialog.
+        var selected_key = JSON.parse(sessionStorage.getItem("rc_openpgpjs:selected_key"));
+        if (selected_key) {
+          resolve(selected_key);
+        } else {
+          $("#openpgpjs_key_select").dialog("open");
+          this.key_select_resolve_reject = {resolve: resolve, reject: reject};
+        }
       } else {
         // If we don't have to sign, they don't need to pick a key or decrypt it.
         resolve({id: undefined, passphrase: undefined});
@@ -654,6 +661,7 @@ if(window.rcmail) {
       rcmail.command("send", this);
     },
     function (failed_reason) {
+      throw failed_reason;
       // This should only happen if the user cancelled the key select, because
       // this is only reached if an affirmative reject is called.  If an
       // exception is thrown, control does not reach this.
@@ -851,12 +859,12 @@ if(window.rcmail) {
   /**
    * Select a private key.
    *
-   * @param i {Integer} Used as openpgp.keyring[private|public]Keys[i]
+   * @param keyId {String} The selected key.
+   * @param personNum {Integer} Which "person" listed in the key should we display to the user?
    */
-  function select_key(i, j) {
-    fingerprint = rc_openpgpjs_crypto.getFingerprint(i, true, false);
-    $("#openpgpjs_selected").html("<strong>" + rcmail.gettext("selected", "rc_openpgpjs") + ":</strong> " + $(".clickme#" + fingerprint+"-"+j).html());
-    $("#openpgpjs_selected_id").val(i);
+  function select_key(keyId, personNum) {
+    $("#openpgpjs_selected").html("<strong>" + rcmail.gettext("selected", "rc_openpgpjs") + ":</strong> " + $(".clickme#"+keyId+"-"+personNum).html());
+    $("#openpgpjs_selected_id").val(keyId);
     $("#passphrase").val("");
   }
   window.select_key = select_key;
@@ -876,10 +884,13 @@ if(window.rcmail) {
       for (var i = 0; i < rc_openpgpjs_crypto.getPrivkeyCount(); i++) {
         var persons = rc_openpgpjs_crypto.getPersons(i, true);
         for (var j = 0; j < persons.length; j++) {
-          fingerprint = rc_openpgpjs_crypto.getFingerprint(i, true, false);
+          var keyId = rc_openpgpjs_crypto.getKeyID(i, true, true);
+          var displayKeyId = "0x"+keyId.toUpperCase();
           person = persons[j];
-          $("#openpgpjs_key_select_list").append("<div class=\"clickme\" id=\""+fingerprint+"-"+j+"\" onclick=\"select_key("+i+", "+j+");\"></div>");
-          $("#openpgpjs_key_select_list #"+fingerprint+"-"+j).text(fingerprint+" "+person);
+          $("#openpgpjs_key_select_list").append("<div class=\"clickme\" id=\""+keyId+"-"+j+"\"></div>");
+          $("#openpgpjs_key_select_list #"+keyId+"-"+j)
+            .click(select_key.bind(null, keyId, j))
+            .text(displayKeyId+" "+person);
         }
       }
 
