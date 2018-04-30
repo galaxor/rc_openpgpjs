@@ -122,7 +122,12 @@ class rc_openpgpjs extends rcube_plugin {
                     'id' => 'rc_openpgpjs-remembered-key',
                     'title' => $this->gettext('remembered_key_tooltip'),
                   ),
-                  $this->gettext('remembered_key')
+                  html::span(
+                    array(
+                      'id' => 'rc_openpgpjs-remembered-key-label',
+                    ),
+                    $this->gettext('remembered_key')
+                  )
                   . html::span(array('id' => 'rc_openpgpjs-remembered-keyid'), "This is where the remembered key would go.")
                   . html::div(
                       array(

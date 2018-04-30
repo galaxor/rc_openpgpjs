@@ -95,3 +95,25 @@ table.records-table td.person ul {
 table.records-table td.person li {
 	display: block;
 }
+
+#rc_openpgpjs-remembered-key {
+        padding: 0.4ex;
+        padding-top: 0.5ex;
+}
+
+#rc_openpgpjs-remembered-key #rc_openpgpjs-remembered-key-label {
+        font-weight: bold;
+        position: relative;
+        padding-right: 1ex;
+}
+
+#rc_openpgpjs-remembered-key span#rc_openpgpjs-remembered-key-id {
+}
+
+#rc_openpgpjs-remembered-key div#rc_openpgpjs-forget-key {
+        font-weight: bold;
+        border: 1px solid black;
+        float: left;
+        padding: 0.2ex;
+        margin: 0.4ex;
+}
