@@ -97,6 +97,11 @@ if(window.rcmail) {
           $("#rc_openpgpjs-remembered-key").addClass("hidden");
         }
       });
+
+      $("#rc_openpgpjs-forget-key").click(function () { 
+        sessionStorage.setItem("rc_openpgpjs:selected_key", JSON.stringify(false));
+        $("#rc_openpgpjs-remembered-key").addClass("hidden");
+      });
     }
 
     $("#openpgpjs_key_select").dialog({
