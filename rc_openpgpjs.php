@@ -121,6 +121,7 @@ class rc_openpgpjs extends rcube_plugin {
                   array(
                     'id' => 'rc_openpgpjs-remembered-key',
                     'title' => $this->gettext('remembered_key_tooltip'),
+                    'class' => 'hidden',
                   ),
                   html::span(
                     array(
@@ -128,14 +129,27 @@ class rc_openpgpjs extends rcube_plugin {
                     ),
                     $this->gettext('remembered_key')
                   )
-                  . html::span(array('id' => 'rc_openpgpjs-remembered-keyid'), "This is where the remembered key would go.")
-                  . html::div(
-                      array(
-                        'id' => 'rc_openpgpjs-forget-key',
-                        'title' => $this->gettext('forget_remembered_key_tooltip'),
-                      ),
-                      $this->gettext('forget_remembered_key')
-                    )
+                  .html::div(
+                    array(
+                      'id' => 'rc_openpgpjs-forget-key',
+                      'title' => $this->gettext('forget_remembered_key_tooltip'),
+                    ),
+                    $this->gettext('forget_remembered_key')
+                  )
+                  . implode("", array(
+                      "<table id=\"rc_openpgpjs-remembered-keyid\" class=\"records-table\">"
+                    , "<thead><tr>"
+                    , "<th class=\"key_id\">",$this->gettext('key_id'),"</th>"
+                    , "<th class=\"person\">",$this->gettext('person'),"</th>"
+                    , "<th class=\"length_alg\">",$this->gettext('length_alg'),"</th>"
+                    , "</tr></thead>"
+                    , "<tbody><tr>"
+                    , "<td class=\"key_id\"></td>"
+                    , "<td class=\"person\"></td>"
+                    , "<td class=\"length_alg\"></td>"
+                    , "</tr></tbody>"
+                    , "</table>"
+                  ))
                 ),
                 "composeoptions"
               );

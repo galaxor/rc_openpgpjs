@@ -70,6 +70,35 @@ if(window.rcmail) {
     // set_passphrase if we have successfully decrypted a key.
     this.key_selected = false;
 
+    // If there's a remembered key, we should show the user what key is remembered.
+    // There's some html for that, but we need to make it visible if it should be used.
+    var selected_key = JSON.parse(sessionStorage.getItem("rc_openpgpjs:selected_key"));
+    if (selected_key) {
+      var index = rc_openpgpjs_crypto.lookupKeyById(selected_key.id, true);
+      var key_id = rc_openpgpjs_crypto.getKeyID(index, true);
+      var persons = rc_openpgpjs_crypto.getPersons(index, true);
+      var length_alg = rc_openpgpjs_crypto.getAlgorithmString(index, true);
+      $("#rc_openpgpjs-remembered-key tbody td.key_id").text(key_id);
+      $("#rc_openpgpjs-remembered-key tbody td.length_alg").text(length_alg);
+      
+      $("#rc_openpgpjs-remembered-key tbody tr td.person").html('<ul></ul>');
+      persons.forEach(function (person) { 
+        $("#rc_openpgpjs-remembered-key tbody tr td.person ul").html('<li></li>');
+        $("#rc_openpgpjs-remembered-key tbody tr:last td.person ul li:last").text(person);
+      });
+
+      if ($("#openpgpjs_sign").is(":checked")) {
+        $("#rc_openpgpjs-remembered-key").removeClass("hidden");
+      }
+      $("#openpgpjs_sign").click(function () {
+        if ($(this).is(":checked")) {
+          $("#rc_openpgpjs-remembered-key").removeClass("hidden");
+        } else {
+          $("#rc_openpgpjs-remembered-key").addClass("hidden");
+        }
+      });
+    }
+
     $("#openpgpjs_key_select").dialog({
       modal: true,
       autoOpen: false,
@@ -942,7 +971,7 @@ if(window.rcmail) {
         statusMark = rc_openpgpjs_crypto.verifyBasicSignatures(i);
         // The most concise way to put this would be to say
         //   status = rcmail.gettext(statusMark, "rc_openpgpjs");
-        // However, in GNU Gettext, it is a bad idea to use a variable ast the
+        // However, in GNU Gettext, it is a bad idea to use a variable as the
         // gettext text, because there are automated tools that look for all the
         // labels mentioned in the code, and make files for translators to work
         // with.  If you use anything other than a string literal, it breaks that

@@ -163,6 +163,52 @@ rc_openpgpjs_crypto.prototype.getPubkeyCount = function () {
 	return this.keyring.publicKeys.keys.length;
 }
 
+/**
+ * Given a keyId, find its index in the list of keys.
+ * We have this function because I was writing code to show the "remembered
+ * key" on the email compose screen.  If the user previously signed a message,
+ * they may have checked a box to remember the private key they chose, and the
+ * passphrase.  We want to show what key will be used by default if they send
+ * the message.
+ * We already had code in rc_openpgpjs_crypto to get various things out of keys
+ * -- the keyId, the algorithm, the list of persons.  Those functions are used
+ * to fill the tables in the key manager.  But those functions do not expect to
+ * take a keyId as an argument.  Instead, those functions expect a position
+ * index into the keyring's array of keys.  The key manager lists every key, so
+ * it makes more sense in that context to use a position index.
+ * Well, for reasons explained elsewhere (possibly a commit log near here),
+ * when we store the key selection, we do not store the index, we store a keyId.
+ * So in order to leverage those functions that extract key information, we
+ * need a way to translate a keyId into a position index.  That's what this
+ * function does.
+ * However, unlike openpgpjs's KeyArray.prototype.getForId, this function does
+ * not take subkeys into account.  We can't just use
+ * KeyArray.prototype.getForId, because that returns a key, not a position
+ * index.  We could copy/paste their code to look thru subkeys, but I am too
+ * lazy to figure out how to test that.  I'd rather change our functions that
+ * extract key information so that they take keyId as an argument instead of a
+ * position index.  The functions I'm talking about are getKeyID, getPersons,
+ * and getAlgorithmString here in this file.
+ * @param keyId {String} Key id. 16 chars, lowercase, no "0x".
+ * @param getPrivate {Integer} Should we look the key up in the list of private keys?
+ * @return {Integer} The index in the array that we could use to find the key in the keyring.  If getPrivate is true, it's the index in the keyring.privateKeys.keys array.  Otherwise, keyring.publicKeys.keys.  It will be null if the key is not found.
+ */
+rc_openpgpjs_crypto.prototype.lookupKeyById = function (keyId, getPrivate) {
+  var keylist;
+  if (getPrivate) {
+    keylist = this.keyring.privateKeys.keys;
+  } else {
+    keylist = this.keyring.publicKeys.keys;
+  }
+
+  for (var i=0; i<keylist.length; i++) {
+    if (keylist[i].primaryKey.getKeyId().toHex() == keyId) {
+      return i;
+    }
+  }
+  return null;
+}
+
 rc_openpgpjs_crypto.prototype.getFingerprint = function (i, getPrivate, niceformat) {
 	if(typeof(getPrivate) == "undefined") {
 		gePrivate = false;
