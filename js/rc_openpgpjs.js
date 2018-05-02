@@ -587,8 +587,7 @@ if(window.rcmail) {
     var encrypt_requested = $("#openpgpjs_encrypt").is(":checked");
     var sign_requested = $("#openpgpjs_sign").is(":checked");
 
-    // Sign only, or Encrypt+sign.
-    if(!rc_openpgpjs_crypto.getPrivkeyCount()) {
+    if(sign_requested && !rc_openpgpjs_crypto.getPrivkeyCount()) {
       alert(rcmail.gettext("no_keys", "rc_openpgpjs"));
       return false;
     }
